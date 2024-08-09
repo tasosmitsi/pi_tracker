@@ -38,7 +38,7 @@ def mqtt_ini():
 def post_message(mqtt_client, publish_topic, publish_message):
     try:
         # Publish a message to the topic every 5 seconds
-        mqtt_client.publish(publish_topic, publish_message, qos=qos, retain=retain)
+        mqtt_client.publish(client_id + "/" + publish_topic, publish_message, qos=qos, retain=retain)
         print(f"Published message: {publish_message} to topic: {publish_topic}")
     except KeyboardInterrupt:
         print("Interrupted by user")
