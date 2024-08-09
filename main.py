@@ -1,6 +1,7 @@
 import sys
 import time
 import signal
+import config
 
 from Thread import StoppableRestartableThread
 from Thread import StoppableRestartableGiThread
@@ -22,7 +23,7 @@ def idle_function(delay, stop_event):
 
     thread_post_modem = StoppableRestartableGiThread(target=post_modem, args=(mqtt_client, modem))
     thread_post_battery = StoppableRestartableGiThread(target=post_battery, args=(mqtt_client, pijuice))
-    thread_print_btn = StoppableRestartableGiThread(target=print_btn, args=(pijuice, ))
+    thread_change_alarm_state = StoppableRestartableGiThread(target=change_alarm_state, args=(pijuice, ))
 
     # Initiate the telemetry thread and start it imediately, it will always be on.
     thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice))
@@ -35,12 +36,14 @@ def idle_function(delay, stop_event):
             i = 1
             # thread_post_modem.start(2)
             # thread_post_battery.start(2)
-            thread_print_btn.start(2)
+            thread_change_alarm_state.start(2)
+
+        
         time.sleep(delay)
 
     # thread_post_modem.stop()
     # thread_post_battery.stop()
-    thread_print_btn.stop()
+    thread_change_alarm_state.stop()
     thread_telemetry.stop()
     print("Stopping mqtt...")
     mqtt_client.loop_stop()
@@ -49,12 +52,21 @@ def idle_function(delay, stop_event):
 def main():
     global loop
     global idle
-    global alarm_state # 0 for un-armed, 1 for armed, 3 panic
+    
+    
+    # 0 for un-armed, 1 for armed, 3 panic
+    # assume we start with alarm un-armed. In reality this value will be read
+    # from the config file
+    config.alarm_state = 0
+
+    # config.btn_state = {'data': {'SW1': 'NO_EVENT'}, 'error': 'NO_ERROR'}
+    
     
     loop = GLib.MainLoop() # Init the GLib main loop
     signal.signal(signal.SIGINT, signal_handler) # Set up the signal handler for SIGINT (Ctrl+C)
     # Start the idle thread
-    idle = StoppableRestartableThread(target=idle_function, args=(), kwargs={'delay': 0.5}).start()  
+    idle = StoppableRestartableThread(target=idle_function, args=(), kwargs={'delay': 0.5}).start()
+
     loop.run() # Start the main loop
     print("Exiting the application...")
 

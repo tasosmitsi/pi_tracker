@@ -1,4 +1,5 @@
 import json
+import config
 import gi
 gi.require_version('ModemManager', '1.0')
 from gi.repository import ModemManager
@@ -15,25 +16,52 @@ def post_modem(mqtt_client, modem):
     post_message(mqtt_client, 'modem/stats', publish_message)
     return True
 
-def print_btn(pijuice):
-    btn_events = pijuice.status.GetButtonEvents()
+def change_alarm_state(pijuice):
+    while True:
+        btn_state = get_btn_state(pijuice.status.GetButtonEvents())
+        # btn_state = get_btn_state(config.btn_state)
+        print(btn_state)
+        
+        if btn_state:
+            break
+    # change the alarm state since the button has been pressed
+    # only if the alarm is un-armed (0), the alarm can be activated
+    # for every other state the button should do nothing
+    if btn_state == "pressed" and config.alarm_state == 0:
+        arm_alarm()
+        pijuice.status.AcceptButtonEvent('SW1')
+        # print(pijuice.status.GetButtonEvents())
+        
+    return True
+
+def arm_alarm():
+    # do other things, like play a sound
+    # save also the alarm state in a file
+    print("Alarm state is being changed to armed...")
+    config.alarm_state = 1
+
+def get_btn_state(btn_events):
+    if "error" not in btn_events:
+        return False
 
     if btn_events['error'] != 'NO_ERROR':
         print("Button events reported:" + btn_events['error'])
+        return False
 
-    if 'data' in btn_events:
-        if btn_events['data']['SW1'] == 'SINGLE_PRESS':
-            print(btn_events)
-            pijuice.status.AcceptButtonEvent('SW1')
-            print(pijuice.status.GetButtonEvents())
+    if 'data' not in btn_events:
+        return False
+        
+    if btn_events['data']['SW1'] == 'SINGLE_PRESS':
+        print(btn_events)
+        return "pressed"
+
     return True
 
 def telemetry(mqtt_client, modem, pijuice):
     post_message(mqtt_client, 'telemetry/power_management', json.dumps(get_power_management_stats_sync(pijuice)))
     post_message(mqtt_client, 'telemetry/modem', json.dumps(get_modem_stats_sync(modem)))
-    post_message(mqtt_client, 'telemetry/alarm_state', json.dumps(get_modem_stats_sync(modem)))
+    post_message(mqtt_client, 'telemetry/alarm_state', config.alarm_state)
     return True
-
 
 def get_power_management_stats_sync(pijuice):
     stats = {}
@@ -68,7 +96,7 @@ def check_if_power_management_error_exist(reply):
     if "error" not in reply:
         return reply
 
-    if 'data' not in reply:
+    if "data" not in reply:
         return reply
         
     if reply['error'] == "NO_ERROR":
