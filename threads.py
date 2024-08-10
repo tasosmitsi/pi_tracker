@@ -20,15 +20,15 @@ def change_alarm_state(pijuice):
     while True:
         btn_state = get_btn_state(pijuice.status.GetButtonEvents())
         # btn_state = get_btn_state(config.btn_state)
-        print(btn_state)
-        
+        # print(btn_state)
         if btn_state:
             break
     # change the alarm state since the button has been pressed
     # only if the alarm is un-armed (0), the alarm can be activated
     # for every other state the button should do nothing
-    if btn_state == "pressed" and config.alarm_state == 0:
-        arm_alarm()
+    if btn_state == "pressed": 
+        if config.alarm_state == 0:
+            arm_alarm()
         pijuice.status.AcceptButtonEvent('SW1')
         # print(pijuice.status.GetButtonEvents())
         
