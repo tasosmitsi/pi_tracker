@@ -22,16 +22,31 @@ def mqtt_ini():
     
     # Connect to the MQTT broker using WebSockets
     client.ws_set_options(path=path)  # Set the WebSocket path
-    
-    # Connect to the MQTT broker
-    client.connect(broker, port, 60)
-    
-    # Subscribe to the topic
-    client.subscribe(subscribe_topic)
-    
-    # Start the MQTT client loop in a separate thread
-    client.loop_start()
 
+    while True:
+        # Connect to the MQTT broker
+        try:
+            client.connect(broker, port, 60)
+            break
+        except Exception as e:
+            print(e)
+
+    while True:
+        # Subscribe to the topic
+        try:
+            client.subscribe(subscribe_topic)
+            break
+        except Exception as e:
+            print(e)
+
+    while True:
+        # Start the MQTT client loop in a separate thread
+        try:
+            client.loop_start()
+            break
+        except Exception as e:
+            print(e)
+            
     return client
 
 
@@ -39,9 +54,9 @@ def post_message(mqtt_client, publish_topic, publish_message):
     try:
         # Publish a message to the topic every 5 seconds
         mqtt_client.publish(client_id + "/" + publish_topic, publish_message, qos=qos, retain=retain)
-        print(f"Published message: {publish_message} to topic: {publish_topic}")
-    except KeyboardInterrupt:
-        print("Interrupted by user")
+        # print(f"Published message: {publish_message} to topic: {publish_topic}")
+    except Exception as e:
+        print(e)
 
 # Callback function for when a message is received
 def on_message(client, userdata, msg):
