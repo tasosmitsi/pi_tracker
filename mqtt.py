@@ -1,12 +1,16 @@
 import paho.mqtt.client as mqtt
+import fnmatch
+from actions import *
 
 # MQTT Broker details
 broker = 'tasos61.duckdns.org'
 port =  8080 # Default MQTT port
 path = '/ws'  # WebSocket path
-subscribe_topic = 'your/subscribe/topic'
-publish_topic = 'your/publish/topic'
 client_id = 'pi0w'
+subscribe_topics = [
+    client_id + "/command"
+]
+
 qos = 1  # QoS level
 retain = False  # Retain flag
 
@@ -30,14 +34,23 @@ def mqtt_ini():
             break
         except Exception as e:
             print(e)
-
+# ------------------------
     while True:
-        # Subscribe to the topic
+        # Subscribe to debuging topic
         try:
-            client.subscribe(subscribe_topic)
+            client.subscribe(client_id + "/command/#")
             break
         except Exception as e:
             print(e)
+# ------------------------
+    # for topic in subscribe_topics:
+    #     while True:
+    #         # Subscribe to the topic
+    #         try:
+    #             client.subscribe(topic)
+    #             break
+    #         except Exception as e:
+    #             print(e)
 
     while True:
         # Start the MQTT client loop in a separate thread
@@ -60,4 +73,32 @@ def post_message(mqtt_client, publish_topic, publish_message):
 
 # Callback function for when a message is received
 def on_message(client, userdata, msg):
-    print(f"Received message: {msg.payload.decode()} from topic: {msg.topic}")
+    # do something to filter incoming messages and call the necessary functions
+    # Decode the message payload
+    message = msg.payload.decode()
+    print(f"Received message: {message} from topic: {msg.topic}")
+    
+    # Filter incoming messages based on the topic
+    if msg.topic not in subscribe_topics:
+        print(f"Received message: {message} from topic: {msg.topic}, Unknown topic, message ignored.")
+        post_message(config.mqtt_client, 'errors', f"Received message: {message} from topic: {msg.topic}, Unknown topic, message ignored.")
+        return
+
+    # Filter incoming messages based on the message and topic
+    if msg.topic == client_id + "/command" and message == "disarm_alarm":
+        disarm_alarm()
+    elif msg.topic == client_id + "/command" and message == "arm_alarm":
+        arm_alarm()
+    # add more else if here
+    else:
+        print(f"Received message: {message} from topic: {msg.topic}, Unknown command.")
+        post_message(config.mqtt_client, 'errors', f"Received message: {message} from topic: {msg.topic}, Unknown command.")
+        return
+
+    post_message(config.mqtt_client, 'errors', f"")
+    return
+        
+
+
+
+

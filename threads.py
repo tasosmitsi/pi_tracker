@@ -5,6 +5,7 @@ gi.require_version('ModemManager', '1.0')
 from gi.repository import ModemManager
 
 from mqtt import *
+from actions import *
 
 def post_battery(mqtt_client, pijuice):
     publish_message = json.dumps(pijuice.status.GetChargeLevel())
@@ -27,18 +28,11 @@ def change_alarm_state(pijuice):
     # only if the alarm is un-armed (0), the alarm can be activated
     # for every other state the button should do nothing
     if btn_state == "pressed": 
-        if config.alarm_state == 0:
-            arm_alarm()
+        arm_alarm()
         pijuice.status.AcceptButtonEvent('SW1')
         # print(pijuice.status.GetButtonEvents())
         
     return True
-
-def arm_alarm():
-    # do other things, like play a sound
-    # save also the alarm state in a file
-    print("Alarm state is being changed to armed...")
-    config.alarm_state = 1
 
 def get_btn_state(btn_events):
     if "error" not in btn_events:
