@@ -16,18 +16,29 @@ def signal_handler(sig, frame):
     idle.stop()
     loop.quit()
 
-def idle_function(delay, stop_event):    
-    modem, modem_location = modem_init()
+def idle_function(delay, stop_event):
+    try:
+        modem, modem_location = modem_init()
+    except Exception as e:
+        print("Modem could be diconected, see the exception below:")
+        print(e)
+        
     pijuice = init_pijuice()
     mqtt_client = mqtt_ini()
+    config.mqtt_client = mqtt_client
+    started_threads = []
 
-    thread_post_modem = StoppableRestartableGiThread(target=post_modem, args=(mqtt_client, modem))
-    thread_post_battery = StoppableRestartableGiThread(target=post_battery, args=(mqtt_client, pijuice))
-    thread_change_alarm_state = StoppableRestartableGiThread(target=change_alarm_state, args=(pijuice, ))
+    # thread_post_modem = StoppableRestartableGiThread(target=post_modem, args=(mqtt_client, modem))
+    # thread_post_battery = StoppableRestartableGiThread(target=post_battery, args=(mqtt_client, pijuice)).start(60)
+    # started_threads.append(thread_post_battery)
 
+    # Initiate the change_alarm_state thread and start it imediately, it will always be on.
+    thread_change_alarm_state = StoppableRestartableGiThread(target=change_alarm_state, args=(pijuice, )).start(2)
+    started_threads.append(thread_change_alarm_state)
+    
     # Initiate the telemetry thread and start it imediately, it will always be on.
-    thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice))
-    thread_telemetry.start(1)
+    thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(2)
+    started_threads.append(thread_telemetry)
 
     i = 0
     while not stop_event.is_set():
@@ -35,16 +46,17 @@ def idle_function(delay, stop_event):
         if i == 0:
             i = 1
             # thread_post_modem.start(2)
+            # started_threads.append(thread_post_modem)
             # thread_post_battery.start(2)
-            thread_change_alarm_state.start(2)
+            # started_threads.append(thread_post_battery)
+            
 
-        
         time.sleep(delay)
 
-    # thread_post_modem.stop()
-    # thread_post_battery.stop()
-    thread_change_alarm_state.stop()
-    thread_telemetry.stop()
+    # Stop all started threads
+    for thread in started_threads:
+        thread.stop()
+        
     print("Stopping mqtt...")
     mqtt_client.loop_stop()
     mqtt_client.disconnect()
@@ -52,7 +64,6 @@ def idle_function(delay, stop_event):
 def main():
     global loop
     global idle
-    
     
     # 0 for un-armed, 1 for armed, 3 panic
     # assume we start with alarm un-armed. In reality this value will be read
