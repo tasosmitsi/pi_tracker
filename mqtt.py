@@ -95,6 +95,9 @@ def on_message(client, userdata, msg):
         post_message(config.mqtt_client, 'errors', f"Received message: {message} from topic: {msg.topic}, Unknown command.")
         return
 
+    # post the new alarm state back immediately
+    post_message(config.mqtt_client, 'telemetry/alarm_state', config.alarm_state)
+    # clear the errors by posting empty string
     post_message(config.mqtt_client, 'errors', f"")
     return
         

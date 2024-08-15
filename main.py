@@ -37,7 +37,7 @@ def idle_function(delay, stop_event):
     started_threads.append(thread_change_alarm_state)
     
     # Initiate the telemetry thread and start it imediately, it will always be on.
-    thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(2)
+    thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(60)
     started_threads.append(thread_telemetry)
 
     i = 0
