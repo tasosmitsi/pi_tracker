@@ -2,10 +2,11 @@ import paho.mqtt.client as mqtt
 from paho.mqtt.enums import MQTTProtocolVersion
 import fnmatch
 from actions import *
+import ssl
 
 # MQTT Broker details
-broker = 'tasos61.duckdns.org'
-port =  8080 # Default MQTT port
+broker = '192.168.178.203'
+port =  4433 # Default MQTT port
 path = '/ws'  # WebSocket path
 client_id = 'pi0w'
 subscribe_topics = [
@@ -24,6 +25,17 @@ def mqtt_ini():
     
     # Connect to the MQTT broker using WebSockets
     client.ws_set_options(path=path)  # Set the WebSocket path
+
+    # Set the client's certificate and key for mutual authentication
+    client.tls_set(
+        ca_certs="certs/ca_certificate.crt",
+        certfile="certs/client_certificate.crt",
+        keyfile="certs/client_private.key",
+        cert_reqs=ssl.CERT_REQUIRED,
+        tls_version=ssl.PROTOCOL_TLS_CLIENT
+    )
+
+    client.tls_insecure_set(False)  # Set to False to verify server certificate
     
     # Set the on_message callback function
     client.on_connect = on_connect
