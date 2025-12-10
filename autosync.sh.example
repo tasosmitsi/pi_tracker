@@ -1,0 +1,23 @@
+#!/bin/bash
+
+PI_USER=""
+PI_HOST=""
+DEST_DIR=""
+SRC_DIR="./"
+
+# ANSI color codes
+GREEN='\033[0;32m'
+NC='\033[0m'  # No Color
+
+# Initial sync
+echo "Performing initial sync..."
+rsync -avz --delete "$SRC_DIR" "$PI_USER@$PI_HOST:$DEST_DIR"
+echo -e "${GREEN}Initial sync completed.${NC}"
+
+# Watch for changes
+inotifywait -mr -e close_write,delete,move "$SRC_DIR" | while read EVENT
+do
+    echo "Change detected: $EVENT"
+    rsync -avz --delete "$SRC_DIR" "$PI_USER@$PI_HOST:$DEST_DIR"
+    echo -e "${GREEN}Sync completed.${NC}"
+done
