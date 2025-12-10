@@ -15,7 +15,7 @@ rsync -avz --delete "$SRC_DIR" "$PI_USER@$PI_HOST:$DEST_DIR"
 echo -e "${GREEN}Initial sync completed.${NC}"
 
 # Watch for changes
-inotifywait -mr -e close_write,delete,move "$SRC_DIR" | while read EVENT
+inotifywait -mr -e close_write,delete,move --exclude '\.git' "$SRC_DIR" | while read EVENT
 do
     echo "Change detected: $EVENT"
     rsync -avz --delete "$SRC_DIR" "$PI_USER@$PI_HOST:$DEST_DIR"
