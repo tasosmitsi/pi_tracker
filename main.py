@@ -11,6 +11,13 @@ from modem import *
 from pi_juice import *
 from helpers import *
 
+import smbus2
+from i2c_bus_manager import I2CBusManager
+from sensors.LPS22HB.LPS22HB_manager import LPS22HB
+
+SHTC3_I2C_ADDRESS   = 0x70
+LPS22HB_I2C_ADDRESS = 0x5C
+
 def signal_handler(sig, frame):
     print("Interrupt received, stopping the idle and main loop...")
     idle.stop()
@@ -64,6 +71,13 @@ def idle_function(delay, stop_event):
 def main():
     global loop
     global idle
+    
+    with I2CBusManager(smbus2, 1) as bus, \
+        LPS22HB(bus, LPS22HB_I2C_ADDRESS) as pressure_sensor:
+        while True:
+            data = pressure_sensor.read_data()
+            print(data)
+            time.sleep(2)
     
     # 0 for un-armed, 1 for armed, 3 panic
     # assume we start with alarm un-armed. In reality this value will be read
