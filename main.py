@@ -13,9 +13,9 @@ from helpers import *
 
 import smbus2
 from i2c_bus_manager import I2CBusManager
-from sensors.LPS22HB.LPS22HB_manager import LPS22HB
-from sensors.TCS34725.TCS34725_manager import TCS34725
-from sensors.SGM58031.SGM58031_manager import SGM58031
+from devices.LPS22HB.LPS22HB_manager import LPS22HB
+from devices.TCS34725.TCS34725_manager import TCS34725
+from devices.SGM58031.SGM58031_manager import SGM58031
 
 SHTC3_I2C_ADDRESS   = 0x70
 LPS22HB_I2C_ADDRESS = 0x5C

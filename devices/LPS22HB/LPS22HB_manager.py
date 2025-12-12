@@ -1,4 +1,4 @@
-from sensors.base_sensor_manager import BaseSensorManager
+from devices.base_sensor_manager import BaseSensorManager
 import time
 
 LPS_ID = 0xB1

@@ -1,6 +1,6 @@
 # TODO: This does not work currently, needs fixing
 
-# from sensors.base_sensor_manager import BaseSensorManager
+# from devices.base_sensor_manager import BaseSensorManager
 # import time
 # from smbus2 import i2c_msg
 
