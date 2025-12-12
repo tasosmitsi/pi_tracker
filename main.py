@@ -51,18 +51,26 @@ def idle_function(delay, stop_event):
     thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(5)
     started_threads.append(thread_telemetry)
 
-    i = 0
-    while not stop_event.is_set():
-        # main loop!
-        if i == 0:
-            i = 1
-            # thread_post_modem.start(2)
-            # started_threads.append(thread_post_modem)
-            # thread_post_battery.start(2)
-            # started_threads.append(thread_post_battery)
-            
+    with I2CBusManager(smbus2, 1) as bus, \
+        LPS22HB(bus, LPS22HB_I2C_ADDRESS) as pressure_sensor, \
+        TCS34725(bus, TCS34725_I2C_ADDRESS) as light_sensor, \
+        SGM58031(bus, SGM_I2C_ADDRESS) as adc_sensor:
 
-        time.sleep(delay)
+        while not stop_event.is_set():
+            # main loop!
+            print(pressure_sensor.read_data())
+            data = light_sensor.read_data()
+            print("R: %d "%data['R'], end = "")
+            print("G: %d "%data['G'], end = "")
+            print("B: %d "%data['B'], end = "") 
+            print("C: %#x "%data['C'], end = "")
+            print("RGB565: %#x "%data['RGB565'], end ="")
+            print("RGB888: %#x "%data['RGB888'], end ="")   
+            print("LUX: %d "%data['LUX'], end = "")
+            print("CT: %dK "%data['CT'], end ="")
+            print("INT: %d "%data['INT'])            
+            print(adc_sensor.read_data())
+            time.sleep(delay)
 
     # Stop all started threads
     for thread in started_threads:
@@ -75,28 +83,6 @@ def idle_function(delay, stop_event):
 def main():
     global loop
     global idle
-    
-    with I2CBusManager(smbus2, 1) as bus, \
-        LPS22HB(bus, LPS22HB_I2C_ADDRESS) as pressure_sensor, \
-        TCS34725(bus, TCS34725_I2C_ADDRESS) as light_sensor, \
-        SGM58031(bus, SGM_I2C_ADDRESS) as adc_sensor:
-            
-        while True:
-            print(pressure_sensor.read_data())
-            
-            data = light_sensor.read_data()
-            print("R: %d "%data['R'], end = "")
-            print("G: %d "%data['G'], end = "")
-            print("B: %d "%data['B'], end = "") 
-            print("C: %#x "%data['C'], end = "")
-            print("RGB565: %#x "%data['RGB565'], end ="")
-            print("RGB888: %#x "%data['RGB888'], end ="")   
-            print("LUX: %d "%data['LUX'], end = "")
-            print("CT: %dK "%data['CT'], end ="")
-            print("INT: %d "%data['INT'])
-            
-            print(adc_sensor.read_data())
-            
     
     # 0 for un-armed, 1 for armed, 3 panic
     # assume we start with alarm un-armed. In reality this value will be read
