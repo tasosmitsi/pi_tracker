@@ -15,10 +15,12 @@ import smbus2
 from i2c_bus_manager import I2CBusManager
 from sensors.LPS22HB.LPS22HB_manager import LPS22HB
 from sensors.TCS34725.TCS34725_manager import TCS34725
+from sensors.SGM58031.SGM58031_manager import SGM58031
 
 SHTC3_I2C_ADDRESS   = 0x70
 LPS22HB_I2C_ADDRESS = 0x5C
 TCS34725_I2C_ADDRESS = 0x29
+SGM_I2C_ADDRESS = 0x48
 
 def signal_handler(sig, frame):
     print("Interrupt received, stopping the idle and main loop...")
@@ -76,7 +78,8 @@ def main():
     
     with I2CBusManager(smbus2, 1) as bus, \
         LPS22HB(bus, LPS22HB_I2C_ADDRESS) as pressure_sensor, \
-        TCS34725(bus, TCS34725_I2C_ADDRESS) as light_sensor:
+        TCS34725(bus, TCS34725_I2C_ADDRESS) as light_sensor, \
+        SGM58031(bus, SGM_I2C_ADDRESS) as adc_sensor:
             
         while True:
             print(pressure_sensor.read_data())
@@ -91,6 +94,8 @@ def main():
             print("LUX: %d "%data['LUX'], end = "")
             print("CT: %dK "%data['CT'], end ="")
             print("INT: %d "%data['INT'])
+            
+            print(adc_sensor.read_data())
             
     
     # 0 for un-armed, 1 for armed, 3 panic
