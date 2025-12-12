@@ -14,9 +14,11 @@ from helpers import *
 import smbus2
 from i2c_bus_manager import I2CBusManager
 from sensors.LPS22HB.LPS22HB_manager import LPS22HB
+from sensors.TCS34725.TCS34725_manager import TCS34725
 
 SHTC3_I2C_ADDRESS   = 0x70
 LPS22HB_I2C_ADDRESS = 0x5C
+TCS34725_I2C_ADDRESS = 0x29
 
 def signal_handler(sig, frame):
     print("Interrupt received, stopping the idle and main loop...")
@@ -73,11 +75,23 @@ def main():
     global idle
     
     with I2CBusManager(smbus2, 1) as bus, \
-        LPS22HB(bus, LPS22HB_I2C_ADDRESS) as pressure_sensor:
+        LPS22HB(bus, LPS22HB_I2C_ADDRESS) as pressure_sensor, \
+        TCS34725(bus, TCS34725_I2C_ADDRESS) as light_sensor:
+            
         while True:
-            data = pressure_sensor.read_data()
-            print(data)
-            time.sleep(2)
+            print(pressure_sensor.read_data())
+            
+            data = light_sensor.read_data()
+            print("R: %d "%data['R'], end = "")
+            print("G: %d "%data['G'], end = "")
+            print("B: %d "%data['B'], end = "") 
+            print("C: %#x "%data['C'], end = "")
+            print("RGB565: %#x "%data['RGB565'], end ="")
+            print("RGB888: %#x "%data['RGB888'], end ="")   
+            print("LUX: %d "%data['LUX'], end = "")
+            print("CT: %dK "%data['CT'], end ="")
+            print("INT: %d "%data['INT'])
+            
     
     # 0 for un-armed, 1 for armed, 3 panic
     # assume we start with alarm un-armed. In reality this value will be read
