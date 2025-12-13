@@ -8,7 +8,7 @@ from Thread import StoppableRestartableGiThread
 from threads import *
 from mqtt import *
 from modem import *
-from pi_juice import *
+from pijuice import PiJuice
 from helpers import *
 
 import smbus2
@@ -21,6 +21,7 @@ SHTC3_I2C_ADDRESS   = 0x70
 LPS22HB_I2C_ADDRESS = 0x5C
 TCS34725_I2C_ADDRESS = 0x29
 SGM_I2C_ADDRESS = 0x48
+PI_JUICE_I2C_ADDRESS = 0x14
 
 def signal_handler(sig, frame):
     print("Interrupt received, stopping the idle and main loop...")
@@ -34,51 +35,51 @@ def idle_function(delay, stop_event):
         print("Modem could be diconected, see the exception below:")
         print(e)
         
-    pijuice = init_pijuice()
-    mqtt_client = mqtt_ini()
-    config.mqtt_client = mqtt_client
-    started_threads = []
+    with PiJuice(1, PI_JUICE_I2C_ADDRESS) as pijuice:
+        mqtt_client = mqtt_ini()
+        config.mqtt_client = mqtt_client
+        started_threads = []
 
-    # thread_post_modem = StoppableRestartableGiThread(target=post_modem, args=(mqtt_client, modem))
-    # thread_post_battery = StoppableRestartableGiThread(target=post_battery, args=(mqtt_client, pijuice)).start(60)
-    # started_threads.append(thread_post_battery)
+        # thread_post_modem = StoppableRestartableGiThread(target=post_modem, args=(mqtt_client, modem))
+        # thread_post_battery = StoppableRestartableGiThread(target=post_battery, args=(mqtt_client, pijuice)).start(60)
+        # started_threads.append(thread_post_battery)
 
-    # Initiate the change_alarm_state thread and start it imediately, it will always be on.
-    thread_change_alarm_state = StoppableRestartableGiThread(target=change_alarm_state, args=(pijuice, )).start(2)
-    started_threads.append(thread_change_alarm_state)
-    
-    # Initiate the telemetry thread and start it imediately, it will always be on.
-    thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(5)
-    started_threads.append(thread_telemetry)
-
-    with I2CBusManager(smbus2, 1) as bus, \
-        LPS22HB(bus, LPS22HB_I2C_ADDRESS) as pressure_sensor, \
-        TCS34725(bus, TCS34725_I2C_ADDRESS) as light_sensor, \
-        SGM58031(bus, SGM_I2C_ADDRESS) as adc_sensor:
-
-        while not stop_event.is_set():
-            # main loop!
-            print(pressure_sensor.read_data())
-            data = light_sensor.read_data()
-            print("R: %d "%data['R'], end = "")
-            print("G: %d "%data['G'], end = "")
-            print("B: %d "%data['B'], end = "") 
-            print("C: %#x "%data['C'], end = "")
-            print("RGB565: %#x "%data['RGB565'], end ="")
-            print("RGB888: %#x "%data['RGB888'], end ="")   
-            print("LUX: %d "%data['LUX'], end = "")
-            print("CT: %dK "%data['CT'], end ="")
-            print("INT: %d "%data['INT'])            
-            print(adc_sensor.read_data())
-            time.sleep(delay)
-
-    # Stop all started threads
-    for thread in started_threads:
-        thread.stop()
+        # Initiate the change_alarm_state thread and start it imediately, it will always be on.
+        thread_change_alarm_state = StoppableRestartableGiThread(target=change_alarm_state, args=(pijuice, )).start(2)
+        started_threads.append(thread_change_alarm_state)
         
-    print("Stopping mqtt...")
-    mqtt_client.loop_stop()
-    mqtt_client.disconnect()
+        # Initiate the telemetry thread and start it imediately, it will always be on.
+        thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(5)
+        started_threads.append(thread_telemetry)
+
+        with I2CBusManager(smbus2, 1) as bus, \
+            LPS22HB(bus, LPS22HB_I2C_ADDRESS) as pressure_sensor, \
+            TCS34725(bus, TCS34725_I2C_ADDRESS) as light_sensor, \
+            SGM58031(bus, SGM_I2C_ADDRESS) as adc_sensor:
+
+            while not stop_event.is_set():
+                # main loop!
+                print(pressure_sensor.read_data())
+                data = light_sensor.read_data()
+                print("R: %d "%data['R'], end = "")
+                print("G: %d "%data['G'], end = "")
+                print("B: %d "%data['B'], end = "") 
+                print("C: %#x "%data['C'], end = "")
+                print("RGB565: %#x "%data['RGB565'], end ="")
+                print("RGB888: %#x "%data['RGB888'], end ="")   
+                print("LUX: %d "%data['LUX'], end = "")
+                print("CT: %dK "%data['CT'], end ="")
+                print("INT: %d "%data['INT'])            
+                print(adc_sensor.read_data())
+                time.sleep(delay)
+
+        # Stop all started threads
+        for thread in started_threads:
+            thread.stop()
+            
+        print("Stopping mqtt...")
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
         
 def main():
     global loop
