@@ -1,6 +1,8 @@
 import sys
 import time
 import signal
+import logging
+import os
 import config
 
 from Thread import StoppableRestartableThread
@@ -16,6 +18,9 @@ from i2c_bus_manager import I2CBusManager
 from devices.LPS22HB.LPS22HB_manager import LPS22HB
 from devices.TCS34725.TCS34725_manager import TCS34725
 from devices.SGM58031.SGM58031_manager import SGM58031
+import log_setup
+
+log = logging.getLogger('main')
 
 SHTC3_I2C_ADDRESS   = 0x70
 LPS22HB_I2C_ADDRESS = 0x5C
@@ -24,7 +29,7 @@ SGM_I2C_ADDRESS = 0x48
 PI_JUICE_I2C_ADDRESS = 0x14
 
 def signal_handler(sig, frame):
-    print("Interrupt received, stopping the idle and main loop...")
+    log.info("Interrupt received, stopping the idle and main loop...")
     idle.stop()
     loop.quit()
 
@@ -32,8 +37,7 @@ def idle_function(delay, stop_event):
     try:
         modem, modem_location = modem_init()
     except Exception as e:
-        print("Modem could be diconected, see the exception below:")
-        print(e)
+        log.warning("Modem could be disconnected: %s", e)
         
     with PiJuice(1, PI_JUICE_I2C_ADDRESS) as pijuice:
         mqtt_client = mqtt_ini()
@@ -59,31 +63,27 @@ def idle_function(delay, stop_event):
 
             while not stop_event.is_set():
                 # main loop!
-                print(pressure_sensor.read_data())
+                log.debug("LPS22HB %s", pressure_sensor.read_data())
                 data = light_sensor.read_data()
-                print("R: %d "%data['R'], end = "")
-                print("G: %d "%data['G'], end = "")
-                print("B: %d "%data['B'], end = "") 
-                print("C: %#x "%data['C'], end = "")
-                print("RGB565: %#x "%data['RGB565'], end ="")
-                print("RGB888: %#x "%data['RGB888'], end ="")   
-                print("LUX: %d "%data['LUX'], end = "")
-                print("CT: %dK "%data['CT'], end ="")
-                print("INT: %d "%data['INT'])            
-                print(adc_sensor.read_data())
+                log.debug("TCS34725 R: %d G: %d B: %d C: %#x RGB565: %#x RGB888: %#x LUX: %d CT: %dK INT: %d",
+                          data['R'], data['G'], data['B'], data['C'], data['RGB565'],
+                          data['RGB888'], data['LUX'], data['CT'], data['INT'])
+                log.debug("SGM58031 %s", adc_sensor.read_data())
                 time.sleep(delay)
 
         # Stop all started threads
         for thread in started_threads:
             thread.stop()
             
-        print("Stopping mqtt...")
+        log.info("Stopping mqtt...")
         mqtt_client.loop_stop()
         mqtt_client.disconnect()
         
 def main():
     global loop
     global idle
+
+    log_setup.setup(os.environ.get('PI_TRACKER_LOG_LEVEL', 'INFO'))
     
     # 0 for un-armed, 1 for armed, 3 panic
     # assume we start with alarm un-armed. In reality this value will be read
@@ -99,7 +99,7 @@ def main():
     idle = StoppableRestartableThread(target=idle_function, args=(), kwargs={'delay': 0.5}).start()
 
     loop.run() # Start the main loop
-    print("Exiting the application...")
+    log.info("Exiting the application...")
 
     
     # print("Starting GPS all...")

@@ -1,9 +1,12 @@
 import threading
+import logging
 import time
 
 import gi
 gi.require_version('GLib', '2.0')
 from gi.repository import GLib
+
+log = logging.getLogger(__name__)
 
 class StoppableRestartableThread:
     def __init__(self, target, args=(), kwargs=None):
@@ -22,16 +25,16 @@ class StoppableRestartableThread:
             self.thread = threading.Thread(target=self.target, args=self.args, kwargs=self.kwargs)
             self.thread.start()
         else:
-            print(f"Thread {self.target.__name__} is already running.")
+            log.warning("Thread %s is already running.", self.target.__name__)
         return self
 
     def stop(self):
         if self.thread is not None and self.thread.is_alive():
             self.stop_event.set()
             self.thread.join()
-            print(f"Thread {self.target.__name__} is now stopped.")
+            log.info("Thread %s is now stopped.", self.target.__name__)
         else:
-            print(f"Thread {self.target.__name__} is already stopped.")
+            log.warning("Thread %s is already stopped.", self.target.__name__)
         return self
 
     def is_running(self):
@@ -53,17 +56,17 @@ class StoppableRestartableGiThread:
             self.thread = GLib.timeout_add_seconds(delay, lambda: (self.target(*self.args, **self.kwargs)))
             
         else:
-            print(f"Thread {self.target.__name__} is already running.")
+            log.warning("Thread %s is already running.", self.target.__name__)
         return self
 
     def stop(self):
         if self.thread is not None:
             GLib.source_remove(self.thread)
             self.thread = None
-            print(f"Thread {self.target.__name__} is now stopped.")
+            log.info("Thread %s is now stopped.", self.target.__name__)
             
         else:
-            print(f"Thread {self.target.__name__} is already stopped.")
+            log.warning("Thread %s is already stopped.", self.target.__name__)
         return self
 
     def is_running(self):

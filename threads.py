@@ -1,4 +1,5 @@
 import json
+import logging
 import config
 import gi
 gi.require_version('ModemManager', '1.0')
@@ -6,6 +7,8 @@ from gi.repository import ModemManager
 
 from mqtt import *
 from actions import *
+
+log = logging.getLogger(__name__)
 
 def post_battery(mqtt_client, pijuice):
     publish_message = json.dumps(pijuice.status.GetChargeLevel())
@@ -39,14 +42,14 @@ def get_btn_state(btn_events):
         return False
 
     if btn_events['error'] != 'NO_ERROR':
-        print("Button events reported:" + btn_events['error'])
+        log.warning("Button events reported: %s", btn_events['error'])
         return False
 
     if 'data' not in btn_events:
         return False
         
     if btn_events['data']['SW1'] == 'SINGLE_PRESS':
-        print(btn_events)
+        log.info("Button events: %s", btn_events)
         return "pressed"
 
     return True
