@@ -11,6 +11,7 @@ from threads import *
 from mqtt import *
 from modem import *
 from pijuice import PiJuice
+from button import check_button
 
 import smbus2
 from i2c_bus_manager import I2CBusManager
@@ -51,9 +52,10 @@ def idle_function(delay, stop_event):
         # thread_post_battery = StoppableRestartableGiThread(target=post_battery, args=(mqtt_client, pijuice)).start(60)
         # started_threads.append(thread_post_battery)
 
-        # Initiate the change_alarm_state thread and start it imediately, it will always be on.
-        thread_change_alarm_state = StoppableRestartableGiThread(target=change_alarm_state, args=(pijuice, )).start(intervals.button_poll_s)
-        started_threads.append(thread_change_alarm_state)
+        # Initiate the button thread and start it imediately, it will always be on.
+        # A single press on SW1 arms the alarm.
+        thread_check_button = StoppableRestartableGiThread(target=check_button, args=(pijuice, )).start(intervals.button_poll_s)
+        started_threads.append(thread_check_button)
         
         # Initiate the telemetry thread and start it imediately, it will always be on.
         thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(intervals.telemetry_s)

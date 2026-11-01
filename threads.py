@@ -20,40 +20,6 @@ def post_modem(mqtt_client, modem):
     post_message(mqtt_client, 'modem/stats', publish_message)
     return True
 
-def change_alarm_state(pijuice):
-    while True:
-        btn_state = get_btn_state(pijuice.status.GetButtonEvents())
-        # btn_state = get_btn_state(config.btn_state)
-        # print(btn_state)
-        if btn_state:
-            break
-    # change the alarm state since the button has been pressed
-    # only if the alarm is un-armed (0), the alarm can be activated
-    # for every other state the button should do nothing
-    if btn_state == "pressed": 
-        arm_alarm()
-        pijuice.status.AcceptButtonEvent('SW1')
-        # print(pijuice.status.GetButtonEvents())
-        
-    return True
-
-def get_btn_state(btn_events):
-    if "error" not in btn_events:
-        return False
-
-    if btn_events['error'] != 'NO_ERROR':
-        log.warning("Button events reported: %s", btn_events['error'])
-        return False
-
-    if 'data' not in btn_events:
-        return False
-        
-    if btn_events['data']['SW1'] == 'SINGLE_PRESS':
-        log.info("Button events: %s", btn_events)
-        return "pressed"
-
-    return True
-
 def telemetry(mqtt_client, modem, pijuice):
     post_message(mqtt_client, 'telemetry/power_management', json.dumps(get_power_management_stats_sync(pijuice)))
     post_message(mqtt_client, 'telemetry/modem', json.dumps(get_modem_stats_sync(modem)))
