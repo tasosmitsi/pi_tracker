@@ -11,7 +11,6 @@ from threads import *
 from mqtt import *
 from modem import *
 from pijuice import PiJuice
-from helpers import *
 
 import smbus2
 from i2c_bus_manager import I2CBusManager
@@ -19,8 +18,11 @@ from devices.LPS22HB.LPS22HB_manager import LPS22HB
 from devices.TCS34725.TCS34725_manager import TCS34725
 from devices.SGM58031.SGM58031_manager import SGM58031
 import log_setup
+import settings
 
 log = logging.getLogger('main')
+
+CONFIG_FILE = 'config.yml'
 
 SHTC3_I2C_ADDRESS   = 0x70
 LPS22HB_I2C_ADDRESS = 0x5C
@@ -34,6 +36,7 @@ def signal_handler(sig, frame):
     loop.quit()
 
 def idle_function(delay, stop_event):
+    intervals = settings.current.intervals
     try:
         modem, modem_location = modem_init()
     except Exception as e:
@@ -49,11 +52,11 @@ def idle_function(delay, stop_event):
         # started_threads.append(thread_post_battery)
 
         # Initiate the change_alarm_state thread and start it imediately, it will always be on.
-        thread_change_alarm_state = StoppableRestartableGiThread(target=change_alarm_state, args=(pijuice, )).start(2)
+        thread_change_alarm_state = StoppableRestartableGiThread(target=change_alarm_state, args=(pijuice, )).start(intervals.button_poll_s)
         started_threads.append(thread_change_alarm_state)
         
         # Initiate the telemetry thread and start it imediately, it will always be on.
-        thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(5)
+        thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(intervals.telemetry_s)
         started_threads.append(thread_telemetry)
 
         with I2CBusManager(smbus2, 1) as bus, \
@@ -83,7 +86,11 @@ def main():
     global loop
     global idle
 
+    # Log at INFO while reading the settings, then switch to the configured level.
+    # PI_TRACKER_LOG_LEVEL overrides the level in config.yml.
     log_setup.setup(os.environ.get('PI_TRACKER_LOG_LEVEL', 'INFO'))
+    settings.current = settings.load(CONFIG_FILE)
+    log_setup.setup(os.environ.get('PI_TRACKER_LOG_LEVEL') or settings.current.log.level)
     
     # 0 for un-armed, 1 for armed, 3 panic
     # assume we start with alarm un-armed. In reality this value will be read
@@ -96,7 +103,8 @@ def main():
     loop = GLib.MainLoop() # Init the GLib main loop
     signal.signal(signal.SIGINT, signal_handler) # Set up the signal handler for SIGINT (Ctrl+C)
     # Start the idle thread
-    idle = StoppableRestartableThread(target=idle_function, args=(), kwargs={'delay': 0.5}).start()
+    idle = StoppableRestartableThread(target=idle_function, args=(),
+                                      kwargs={'delay': settings.current.intervals.sensor_loop_s}).start()
 
     loop.run() # Start the main loop
     log.info("Exiting the application...")

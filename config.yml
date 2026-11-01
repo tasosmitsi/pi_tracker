@@ -1,2 +1,21 @@
-params:
-    alarm_state: active
+# pi_tracker settings. Anything left out falls back to the default in settings.py.
+
+mqtt:
+  host: 192.168.178.203
+  port: 4433
+  path: /ws                    # WebSocket path
+  client_id: pi0w              # also the first level of every topic
+  keepalive_s: 60
+  qos: 1
+  retain: false
+  ca_certs: certs/ca_certificate.crt
+  certfile: certs/client_certificate.crt
+  keyfile: certs/client_private.key
+
+intervals:
+  telemetry_s: 5               # whole seconds
+  button_poll_s: 2             # whole seconds
+  sensor_loop_s: 0.5
+
+log:
+  level: INFO                  # DEBUG also shows the sensor readings; PI_TRACKER_LOG_LEVEL overrides this

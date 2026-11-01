@@ -4,36 +4,29 @@ import fnmatch
 from actions import *
 import ssl
 import logging
+import settings
 
 log = logging.getLogger(__name__)
 
-# MQTT Broker details
-broker = '192.168.178.203'
-port =  4433 # Default MQTT port
-path = '/ws'  # WebSocket path
-client_id = 'pi0w'
-subscribe_topics = [
-    client_id + "/command"
-]
-
-qos = 1  # QoS level
-retain = False  # Retain flag
+# Broker details, client id, QoS and certificates come from config.yml (see settings.py)
 
 def mqtt_ini():
+    cfg = settings.current.mqtt
+
     # Create an MQTT client instance
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
-                         client_id=client_id,
+                         client_id=cfg.client_id,
                          transport="websockets",
                          protocol=MQTTProtocolVersion.MQTTv5)
     
     # Connect to the MQTT broker using WebSockets
-    client.ws_set_options(path=path)  # Set the WebSocket path
+    client.ws_set_options(path=cfg.path)  # Set the WebSocket path
 
     # Set the client's certificate and key for mutual authentication
     client.tls_set(
-        ca_certs="certs/ca_certificate.crt",
-        certfile="certs/client_certificate.crt",
-        keyfile="certs/client_private.key",
+        ca_certs=cfg.ca_certs,
+        certfile=cfg.certfile,
+        keyfile=cfg.keyfile,
         cert_reqs=ssl.CERT_REQUIRED,
         tls_version=ssl.PROTOCOL_TLS_CLIENT
     )
@@ -57,24 +50,30 @@ def mqtt_ini():
     while True:
         # Connect to the MQTT broker
         try:
-            client.connect(broker, port, 60)
+            client.connect(cfg.host, cfg.port, cfg.keepalive_s)
             break
         except Exception as e:
-            log.warning("MQTT connect to %s:%s failed: %s", broker, port, e)
+            log.warning("MQTT connect to %s:%s failed: %s", cfg.host, cfg.port, e)
 
     return client
 
 
 def post_message(mqtt_client, publish_topic, publish_message):
+    cfg = settings.current.mqtt
     try:
         # Publish a message to the topic every 5 seconds
-        mqtt_client.publish(client_id + "/" + publish_topic, publish_message, qos=qos, retain=retain)
+        mqtt_client.publish(cfg.client_id + "/" + publish_topic, publish_message, qos=cfg.qos, retain=cfg.retain)
         # print(f"Published message: {publish_message} to topic: {publish_topic}")
     except Exception as e:
         log.warning("Publishing to %s failed: %s", publish_topic, e)
 
 # Callback function for when a message is received
 def on_message(client, userdata, msg):
+    client_id = settings.current.mqtt.client_id
+    subscribe_topics = [
+        client_id + "/command"
+    ]
+
     # do something to filter incoming messages and call the necessary functions
     # Decode the message payload
     message = msg.payload.decode()
@@ -113,7 +112,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
         while True:
             # Subscribe to debuging topic
             try:
-                client.subscribe(client_id + "/command/#")
+                client.subscribe(settings.current.mqtt.client_id + "/command/#")
                 break
             except Exception as e:
                 log.warning("MQTT subscribe failed: %s", e)
