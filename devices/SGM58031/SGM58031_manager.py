@@ -96,12 +96,15 @@ class SGM58031(BaseSensorManager):
         self._write_word(SGM_POINTER_CONFIG, Config_Set)
         time.sleep(0.02)
         data = self._read_u16(SGM_POINTER_CONVERT)
+        if data & 0x8000:  # two's complement: just below 0 V is negative, not ~8 V
+            data -= 1 << 16
         return data
 
     def _read_u16(self, cmd):
-        LSB = self._bus.read_byte_data(self._address, cmd)
-        MSB = self._bus.read_byte_data(self._address, cmd+1)
-        return (LSB << 8) + MSB
+        # Both bytes in one read, MSB first. Two single-byte reads moved the pointer
+        # to the next register, so the low byte used to come from the config register.
+        msb, lsb = self._bus.read_i2c_block_data(self._address, cmd, 2)
+        return (msb << 8) | lsb
 
     def _write_word(self, cmd, val):
         Val_H = val & 0xff
