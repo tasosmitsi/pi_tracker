@@ -1,18 +1,14 @@
 import logging
-import config
+import alarm
 
 log = logging.getLogger(__name__)
 
 def arm_alarm():
     # do other things, like play a sound
-    # save also the alarm state in a file
-    if config.alarm_state == 0:
+    if alarm.current.arm():
         log.info("Alarm state is being changed to armed...")
-        config.alarm_state = 1
 
 def disarm_alarm():
     # do other things, like play a sound
-    # save also the alarm state in a file
-    if config.alarm_state == 1:
+    if alarm.current.disarm():
         log.info("Alarm state is being changed to dis-armed...")
-        config.alarm_state = 0

@@ -1,15 +1,7 @@
-import importlib.util
-import sys
-import types
 import unittest
 
-# actions.py imports a module called `config`, which isn't in the repo,
-# so stand in for it when it can't be found.
-if 'config' not in sys.modules and importlib.util.find_spec('config') is None:
-    sys.modules['config'] = types.ModuleType('config')
-
-import config  # noqa: E402
-import button  # noqa: E402
+import alarm
+import button
 
 
 class FakeStatus:
@@ -40,31 +32,35 @@ BUS_ERROR = {'error': 'COMMUNICATION_ERROR'}
 class CheckButtonTest(unittest.TestCase):
     def setUp(self):
         button._last_error = None
-        config.alarm_state = 0
+        self.saved = alarm.current
+        alarm.current = alarm.AlarmState()
+
+    def tearDown(self):
+        alarm.current = self.saved
 
     def test_single_press_arms_and_is_accepted(self):
         pijuice = FakePiJuice(events('SINGLE_PRESS'))
         self.assertTrue(button.check_button(pijuice))
-        self.assertEqual(config.alarm_state, 1)
+        self.assertEqual(alarm.current.state, alarm.ARMED)
         self.assertEqual(pijuice.status.accepted, ['SW1'])
 
     def test_single_press_while_armed_changes_nothing_but_is_accepted(self):
-        config.alarm_state = 1
+        alarm.current.arm()
         pijuice = FakePiJuice(events('SINGLE_PRESS'))
         button.check_button(pijuice)
-        self.assertEqual(config.alarm_state, 1)
+        self.assertEqual(alarm.current.state, alarm.ARMED)
         self.assertEqual(pijuice.status.accepted, ['SW1'])
 
     def test_no_event_does_nothing(self):
         pijuice = FakePiJuice(events('NO_EVENT'))
         self.assertTrue(button.check_button(pijuice))
-        self.assertEqual(config.alarm_state, 0)
+        self.assertEqual(alarm.current.state, alarm.DISARMED)
         self.assertEqual(pijuice.status.accepted, [])
 
     def test_long_press_is_left_for_the_pijuice_software(self):
         pijuice = FakePiJuice(events('LONG_PRESS1'))
         button.check_button(pijuice)
-        self.assertEqual(config.alarm_state, 0)
+        self.assertEqual(alarm.current.state, alarm.DISARMED)
         self.assertEqual(pijuice.status.accepted, [])
 
     def test_an_error_is_read_once_per_call_and_logged_once(self):

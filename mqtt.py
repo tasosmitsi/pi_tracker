@@ -4,6 +4,8 @@ import fnmatch
 from actions import *
 import ssl
 import logging
+import alarm
+import config
 import settings
 
 log = logging.getLogger(__name__)
@@ -97,7 +99,7 @@ def on_message(client, userdata, msg):
         return
 
     # post the new alarm state back immediately
-    post_message(config.mqtt_client, 'telemetry/alarm_state', config.alarm_state)
+    post_message(config.mqtt_client, 'telemetry/alarm_state', alarm.current.state)
     # clear the errors by posting empty string
     post_message(config.mqtt_client, 'errors', f"")
     return

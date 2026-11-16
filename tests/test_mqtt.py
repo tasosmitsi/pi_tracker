@@ -3,9 +3,10 @@ import sys
 import types
 import unittest
 
+import alarm
 import settings
 
-# mqtt.py needs paho-mqtt. actions.py imports a module called `config`,
+# mqtt.py needs paho-mqtt. It also imports a module called `config`,
 # which isn't in the repo, so stand in for it when it can't be found.
 HAVE_PAHO = importlib.util.find_spec('paho') is not None
 if 'config' not in sys.modules and importlib.util.find_spec('config') is None:
@@ -36,16 +37,15 @@ class TopicsFollowTheSettingsTest(unittest.TestCase):
     def setUp(self):
         import config
         import mqtt
-        self.config = config
         self.mqtt = mqtt
-        self.saved = settings.current
+        self.saved = settings.current, alarm.current
         settings.current = settings.Settings(mqtt=settings.MqttSettings(client_id='bike1', qos=0))
+        alarm.current = alarm.AlarmState()
         self.client = FakeClient()
         config.mqtt_client = self.client
-        config.alarm_state = 0
 
     def tearDown(self):
-        settings.current = self.saved
+        settings.current, alarm.current = self.saved
 
     def test_published_topics_start_with_the_configured_client_id(self):
         self.mqtt.post_message(self.client, 'telemetry/x', 'v')
@@ -53,13 +53,19 @@ class TopicsFollowTheSettingsTest(unittest.TestCase):
 
     def test_commands_are_taken_from_the_configured_topic(self):
         self.mqtt.on_message(self.client, None, FakeMessage('bike1/command', 'arm_alarm'))
-        self.assertEqual(self.config.alarm_state, 1)
+        self.assertEqual(alarm.current.state, alarm.ARMED)
         self.assertIn(('bike1/telemetry/alarm_state', 1, 0, False), self.client.published)
+
+    def test_disarm_command_disarms(self):
+        alarm.current.arm()
+        self.mqtt.on_message(self.client, None, FakeMessage('bike1/command', 'disarm_alarm'))
+        self.assertEqual(alarm.current.state, alarm.DISARMED)
+        self.assertIn(('bike1/telemetry/alarm_state', 0, 0, False), self.client.published)
 
     def test_commands_on_another_prefix_are_rejected(self):
         with self.assertLogs('mqtt', 'WARNING'):
             self.mqtt.on_message(self.client, None, FakeMessage('pi0w/command', 'arm_alarm'))
-        self.assertEqual(self.config.alarm_state, 0)
+        self.assertEqual(alarm.current.state, alarm.DISARMED)
         self.assertEqual(self.client.published[0][0], 'bike1/errors')
 
     def test_subscribes_under_the_configured_client_id(self):

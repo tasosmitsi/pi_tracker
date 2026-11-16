@@ -40,10 +40,18 @@ class LogSettings:
 
 
 @dataclasses.dataclass(frozen=True)
+class StateSettings:
+    # Where the app keeps the files it writes, such as the alarm state. It is
+    # outside the repo so autosync's `rsync --delete` can't remove them.
+    directory: str = '~/.local/state/pi_tracker'
+
+
+@dataclasses.dataclass(frozen=True)
 class Settings:
     mqtt: MqttSettings = dataclasses.field(default_factory=MqttSettings)
     intervals: IntervalSettings = dataclasses.field(default_factory=IntervalSettings)
     log: LogSettings = dataclasses.field(default_factory=LogSettings)
+    state: StateSettings = dataclasses.field(default_factory=StateSettings)
 
 
 current = Settings()

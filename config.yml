@@ -19,3 +19,6 @@ intervals:
 
 log:
   level: INFO                  # DEBUG also shows the sensor readings; PI_TRACKER_LOG_LEVEL overrides this
+
+state:
+  directory: ~/.local/state/pi_tracker   # alarm state etc.; outside the repo so autosync can't delete it

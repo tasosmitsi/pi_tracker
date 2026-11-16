@@ -1,6 +1,6 @@
 import json
 import logging
-import config
+import alarm
 import gi
 gi.require_version('ModemManager', '1.0')
 from gi.repository import ModemManager
@@ -23,7 +23,7 @@ def post_modem(mqtt_client, modem):
 def telemetry(mqtt_client, modem, pijuice):
     post_message(mqtt_client, 'telemetry/power_management', json.dumps(get_power_management_stats_sync(pijuice)))
     post_message(mqtt_client, 'telemetry/modem', json.dumps(get_modem_stats_sync(modem)))
-    post_message(mqtt_client, 'telemetry/alarm_state', config.alarm_state)
+    post_message(mqtt_client, 'telemetry/alarm_state', alarm.current.state)
     return True
 
 def get_power_management_stats_sync(pijuice):
