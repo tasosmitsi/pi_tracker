@@ -1,6 +1,9 @@
 from devices.base_sensor_manager import BaseSensorManager
+import logging
 import time
 from gpiozero import DigitalInputDevice
+
+log = logging.getLogger(__name__)
 
 # GPIO
 INT_PORT = 26
@@ -185,7 +188,15 @@ class TCS34725(BaseSensorManager):
         time.sleep(0.01)
         self.Write_Byte(self.TCS34725_ENABLE,
                         self.TCS34725_ENABLE_PON | self.TCS34725_ENABLE_AEN)
-        time.sleep(0.01)
+        self._wait_for_data()
+
+    def _wait_for_data(self):
+        """Wait up to 1 s for the integration that AEN starts; the data registers aren't valid until it ends."""
+        for _ in range(50):
+            if self.Read_Byte(self.TCS34725_STATUS) & self.TCS34725_STATUS_AVALID:
+                return
+            time.sleep(0.02)
+        log.warning("No reading 1 s after start-up; light and colour values may be wrong")
 
     def Disable(self):
         # Turn the device off to save power
@@ -337,6 +348,7 @@ class TCS34725(BaseSensorManager):
         return lux
 
     def Get_ColorTemp(self):
+        """Colour temperature in kelvin, or 0 when there is too little red light to tell, e.g. in the dark."""
         ir = 1.0
         if (self.R + self.G + self.B > self.C):
             ir = (self.R + self.G + self.B - self.C - 1) / 2
@@ -344,6 +356,8 @@ class TCS34725(BaseSensorManager):
             ir = 0
         r_comp = self.R - ir
         b_comp = self.B - ir
+        if r_comp <= 0:
+            return 0.0
         cct = TCS34725_CT_Coef * (float)(b_comp) / \
             (float)(r_comp) + TCS34725_CT_Offset
         return cct
