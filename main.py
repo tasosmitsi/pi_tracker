@@ -1,5 +1,6 @@
 import sys
 import time
+import json
 import signal
 import logging
 import os
@@ -15,9 +16,11 @@ from button import check_button
 
 import smbus2
 from i2c_bus_manager import I2CBusManager
+from devices import thermistor
 from devices.LPS22HB.LPS22HB_manager import LPS22HB
 from devices.TCS34725.TCS34725_manager import TCS34725
 from devices.SGM58031.SGM58031_manager import SGM58031
+import alarm
 import log_setup
 import settings
 
@@ -66,6 +69,7 @@ def idle_function(delay, stop_event):
             TCS34725(bus, TCS34725_I2C_ADDRESS) as light_sensor, \
             SGM58031(bus, SGM_I2C_ADDRESS) as adc_sensor:
 
+            last_thermistor_post = 0.0  # thermistor experiment
             while not stop_event.is_set():
                 # main loop!
                 log.debug("LPS22HB %s", pressure_sensor.read_data())
@@ -73,7 +77,25 @@ def idle_function(delay, stop_event):
                 log.debug("TCS34725 R: %d G: %d B: %d C: %#x RGB565: %#x RGB888: %#x LUX: %d CT: %dK INT: %d",
                           data['R'], data['G'], data['B'], data['C'], data['RGB565'],
                           data['RGB888'], data['LUX'], data['CT'], data['INT'])
-                log.debug("SGM58031 %s", adc_sensor.read_data())
+                adc = adc_sensor.read_data()
+                log.debug("SGM58031 %s", adc)
+
+                # Thermistor experiment: NTC divider on AIN3, see devices/thermistor.py
+                volts = adc['AIN3'] / 1000
+                ohms = thermistor.resistance(volts)
+                if ohms is None:
+                    log.debug("Thermistor: AIN3 at %.1f mV, open or shorted?", adc['AIN3'])
+                else:
+                    temp_c = thermistor.temperature_c(ohms)
+                    log.debug("Thermistor %.2f °C (AIN3 %.1f mV, %.0f ohm)", temp_c, adc['AIN3'], ohms)
+                    if time.monotonic() - last_thermistor_post >= intervals.telemetry_s:
+                        post_message(mqtt_client, 'telemetry/thermistor', json.dumps({
+                            'temperature_c': round(temp_c, 2),
+                            'voltage_v': round(volts, 4),
+                            'resistance_ohm': round(ohms),
+                        }))
+                        last_thermistor_post = time.monotonic()
+
                 time.sleep(delay)
 
         # Stop all started threads
@@ -94,10 +116,10 @@ def main():
     settings.current = settings.load(CONFIG_FILE)
     log_setup.setup(os.environ.get('PI_TRACKER_LOG_LEVEL') or settings.current.log.level)
     
-    # 0 for un-armed, 1 for armed, 3 panic
-    # assume we start with alarm un-armed. In reality this value will be read
-    # from the config file
-    config.alarm_state = 0
+    # 0 for un-armed, 1 for armed, 3 panic. The state is saved on every change and
+    # read back here, so a restart doesn't disarm the tracker.
+    state_dir = os.path.expanduser(settings.current.state.directory)
+    alarm.current = alarm.AlarmState(os.path.join(state_dir, alarm.FILE_NAME))
 
     # config.btn_state = {'data': {'SW1': 'NO_EVENT'}, 'error': 'NO_ERROR'}
     
