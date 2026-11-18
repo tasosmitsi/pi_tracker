@@ -17,6 +17,7 @@ class FakeClient:
     def __init__(self):
         self.published = []
         self.subscribed = []
+        self.calls = []  # in order: publish, wait, disconnect, loop_stop
         self.connected = True
 
     def is_connected(self):
@@ -24,10 +25,26 @@ class FakeClient:
 
     def publish(self, topic, payload, qos=0, retain=False):
         self.published.append((topic, payload, qos, retain))
+        self.calls.append('publish %s %s' % (topic, payload))
+        return FakeMessageInfo(self.calls)
 
     def subscribe(self, topic, qos=0):
         self.subscribed.append(topic)
         return 0, len(self.subscribed)  # like paho: (MQTT_ERR_SUCCESS, message id)
+
+    def disconnect(self):
+        self.calls.append('disconnect')
+
+    def loop_stop(self):
+        self.calls.append('loop_stop')
+
+
+class FakeMessageInfo:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def wait_for_publish(self, timeout=None):
+        self.calls.append('wait')
 
 
 class FakeMessage:
@@ -119,6 +136,29 @@ class ConnectionTest(MqttTestCase):
         with self.assertLogs('pi_tracker.net.mqtt', 'WARNING') as logs:
             self.mqtt.on_disconnect(self.client, None, None, FAILURE, None)
         self.assertIn('Lost the connection', logs.output[0])
+
+
+class StatusTest(MqttTestCase):
+    def test_the_last_will_says_offline_and_is_set_before_connecting(self):
+        with mock.patch.object(self.mqtt.mqtt, 'Client'):
+            client = self.mqtt.mqtt_ini()
+        client.will_set.assert_called_once_with('bike1/status', 'offline', qos=1, retain=True)
+        calls = [name for name, args, kwargs in client.method_calls]
+        self.assertLess(calls.index('will_set'), calls.index('connect_async'))
+
+    def test_connecting_says_online(self):
+        self.mqtt.on_connect(self.client, None, None, SUCCESS, None)
+        self.assertIn(('bike1/status', 'online', 1, True), self.client.published)
+
+    def test_stopping_says_offline_before_disconnecting(self):
+        self.mqtt.mqtt_stop(self.client)
+        self.assertEqual(self.client.calls, ['publish bike1/status offline', 'wait', 'disconnect', 'loop_stop'])
+        self.assertEqual(self.client.published, [('bike1/status', 'offline', 1, True)])
+
+    def test_stopping_while_not_connected_just_stops(self):
+        self.client.connected = False
+        self.mqtt.mqtt_stop(self.client)
+        self.assertEqual(self.client.calls, ['disconnect', 'loop_stop'])
 
 
 class CallbackErrorsTest(MqttTestCase):

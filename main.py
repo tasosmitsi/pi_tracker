@@ -11,7 +11,7 @@ from pijuice import PiJuice
 from pi_tracker import alarm, log_setup, settings
 from pi_tracker.button import check_button
 from pi_tracker.net.modem import modem_init
-from pi_tracker.net.mqtt import mqtt_ini, post_message
+from pi_tracker.net.mqtt import mqtt_ini, mqtt_stop, post_message
 from pi_tracker.sensor_loop import SensorLoop
 from pi_tracker.sensors.i2c_bus import I2CBusManager
 from pi_tracker.sensors.lps22hb import LPS22HB
@@ -74,8 +74,7 @@ def idle_function(delay, stop_event):
             thread.stop()
             
         log.info("Stopping mqtt...")
-        mqtt_client.loop_stop()
-        mqtt_client.disconnect()
+        mqtt_stop(mqtt_client)
         
 def main():
     global loop

@@ -47,12 +47,33 @@ def mqtt_ini():
     client.on_unsubscribe = _log_errors(on_unsubscribe)
     client.on_message = _log_errors(on_message)
 
+    # Last Will: the broker publishes this itself when the tracker vanishes without
+    # disconnecting (power cut, theft, no coverage), within 1.5 x keepalive_s.
+    # on_connect sets the status back to online.
+    client.will_set(_status_topic(), 'offline', qos=1, retain=True)
+
     # Don't wait for the broker. paho connects in its own thread and keeps
     # retrying, waiting longer after each failure, also when a connection drops.
     client.reconnect_delay_set(min_delay=cfg.reconnect_min_s, max_delay=cfg.reconnect_max_s)
     client.connect_async(cfg.host, cfg.port, cfg.keepalive_s)
     client.loop_start()
     return client
+
+
+def mqtt_stop(client):
+    """Publish offline, disconnect and stop paho's thread. A clean disconnect doesn't trigger the Last Will."""
+    if client.is_connected():
+        try:
+            client.publish(_status_topic(), 'offline', qos=1, retain=True).wait_for_publish(timeout=2)
+        except Exception as e:
+            log.warning("Couldn't publish the offline status: %s", e)
+    client.disconnect()
+    client.loop_stop()  # after disconnect(): paho's thread sends the DISCONNECT
+
+
+def _status_topic():
+    """Retained online/offline, for dashboards and alerts."""
+    return settings.current.mqtt.client_id + '/status'
 
 
 def _log_errors(callback):
@@ -122,6 +143,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
         return
     _connection.succeeded()
     log.info("Connected to the MQTT broker at %s:%s", cfg.host, cfg.port)
+    client.publish(_status_topic(), 'online', qos=1, retain=True)  # replaces the retained Last Will
 
     # Subscribe on every connect, so the subscription is back after a reconnect
     topic = cfg.client_id + "/command/#"
