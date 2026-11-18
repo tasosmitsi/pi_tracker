@@ -3,7 +3,7 @@ import os
 import unittest
 from unittest import mock
 
-import log_setup
+from pi_tracker import log_setup
 
 
 class SetupTest(unittest.TestCase):
@@ -19,7 +19,7 @@ class SetupTest(unittest.TestCase):
         self.assertEqual(logging.getLogger().level, logging.DEBUG)
 
     def test_unknown_level_falls_back_to_info(self):
-        with self.assertLogs('log_setup', 'WARNING'):
+        with self.assertLogs('pi_tracker.log_setup', 'WARNING'):
             log_setup.setup('loud')
         self.assertEqual(logging.getLogger().level, logging.INFO)
 

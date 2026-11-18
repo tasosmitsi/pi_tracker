@@ -4,25 +4,22 @@ import json
 import signal
 import logging
 import os
-import config
-
-from Thread import StoppableRestartableThread
-from Thread import StoppableRestartableGiThread
-from threads import *
-from mqtt import *
-from modem import *
-from pijuice import PiJuice
-from button import check_button
 
 import smbus2
-from i2c_bus_manager import I2CBusManager
-from devices import thermistor
-from devices.LPS22HB.LPS22HB_manager import LPS22HB
-from devices.TCS34725.TCS34725_manager import TCS34725
-from devices.SGM58031.SGM58031_manager import SGM58031
-import alarm
-import log_setup
-import settings
+from gi.repository import GLib
+from pijuice import PiJuice
+
+from pi_tracker import alarm, log_setup, settings
+from pi_tracker.button import check_button
+from pi_tracker.net.modem import modem_init
+from pi_tracker.net.mqtt import mqtt_ini, post_message
+from pi_tracker.sensors import thermistor
+from pi_tracker.sensors.i2c_bus import I2CBusManager
+from pi_tracker.sensors.lps22hb import LPS22HB
+from pi_tracker.sensors.sgm58031 import SGM58031
+from pi_tracker.sensors.tcs34725 import TCS34725
+from pi_tracker.telemetry import telemetry
+from pi_tracker.workers import StoppableRestartableGiThread, StoppableRestartableThread
 
 log = logging.getLogger('main')
 
@@ -48,7 +45,6 @@ def idle_function(delay, stop_event):
         
     with PiJuice(1, PI_JUICE_I2C_ADDRESS) as pijuice:
         mqtt_client = mqtt_ini()
-        config.mqtt_client = mqtt_client
         started_threads = []
 
         # thread_post_modem = StoppableRestartableGiThread(target=post_modem, args=(mqtt_client, modem))
@@ -80,7 +76,7 @@ def idle_function(delay, stop_event):
                 adc = adc_sensor.read_data()
                 log.debug("SGM58031 %s", adc)
 
-                # Thermistor experiment: NTC divider on AIN3, see devices/thermistor.py
+                # Thermistor experiment: NTC divider on AIN3, see pi_tracker/sensors/thermistor.py
                 volts = adc['AIN3'] / 1000
                 ohms = thermistor.resistance(volts)
                 if ohms is None:

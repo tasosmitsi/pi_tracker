@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from devices import thermistor
+from pi_tracker.sensors import thermistor
 
 
 def beta_resistance(temp_c, r25=10000.0, beta=3950.0):

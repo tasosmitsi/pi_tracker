@@ -1,7 +1,6 @@
 import unittest
 
-import alarm
-import button
+from pi_tracker import alarm, button
 
 
 class FakeStatus:
@@ -65,7 +64,7 @@ class CheckButtonTest(unittest.TestCase):
 
     def test_an_error_is_read_once_per_call_and_logged_once(self):
         pijuice = FakePiJuice(BUS_ERROR, BUS_ERROR, BUS_ERROR)
-        with self.assertLogs('button', 'WARNING') as logs:
+        with self.assertLogs('pi_tracker.button', 'WARNING') as logs:
             for _ in range(3):
                 self.assertTrue(button.check_button(pijuice))
         self.assertEqual(len(logs.output), 1)
@@ -73,7 +72,7 @@ class CheckButtonTest(unittest.TestCase):
 
     def test_recovery_after_an_error_is_logged(self):
         pijuice = FakePiJuice(BUS_ERROR, events('NO_EVENT'))
-        with self.assertLogs('button', 'INFO') as logs:
+        with self.assertLogs('pi_tracker.button', 'INFO') as logs:
             button.check_button(pijuice)
             button.check_button(pijuice)
         self.assertIn('read again', logs.output[-1])

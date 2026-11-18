@@ -1,5 +1,6 @@
 import logging
-import alarm
+
+from pi_tracker import alarm
 
 log = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-from devices.base_sensor_manager import BaseSensorManager
+from pi_tracker.sensors.base import BaseSensorManager
 import time
 
 # Pointer Register

@@ -1,16 +1,11 @@
 import importlib.util
-import sys
 import types
 import unittest
 
-import alarm
-import settings
+from pi_tracker import alarm, settings
 
-# mqtt.py needs paho-mqtt. It also imports a module called `config`,
-# which isn't in the repo, so stand in for it when it can't be found.
+# pi_tracker/net/mqtt.py needs paho-mqtt.
 HAVE_PAHO = importlib.util.find_spec('paho') is not None
-if 'config' not in sys.modules and importlib.util.find_spec('config') is None:
-    sys.modules['config'] = types.ModuleType('config')
 
 
 class FakeClient:
@@ -35,14 +30,12 @@ class FakeMessage:
 @unittest.skipUnless(HAVE_PAHO, 'paho-mqtt is not installed')
 class TopicsFollowTheSettingsTest(unittest.TestCase):
     def setUp(self):
-        import config
-        import mqtt
+        from pi_tracker.net import mqtt
         self.mqtt = mqtt
         self.saved = settings.current, alarm.current
         settings.current = settings.Settings(mqtt=settings.MqttSettings(client_id='bike1', qos=0))
         alarm.current = alarm.AlarmState()
         self.client = FakeClient()
-        config.mqtt_client = self.client
 
     def tearDown(self):
         settings.current, alarm.current = self.saved
@@ -63,7 +56,7 @@ class TopicsFollowTheSettingsTest(unittest.TestCase):
         self.assertIn(('bike1/telemetry/alarm_state', 0, 0, False), self.client.published)
 
     def test_commands_on_another_prefix_are_rejected(self):
-        with self.assertLogs('mqtt', 'WARNING'):
+        with self.assertLogs('pi_tracker.net.mqtt', 'WARNING'):
             self.mqtt.on_message(self.client, None, FakeMessage('pi0w/command', 'arm_alarm'))
         self.assertEqual(alarm.current.state, alarm.DISARMED)
         self.assertEqual(self.client.published[0][0], 'bike1/errors')

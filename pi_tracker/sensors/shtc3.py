@@ -1,6 +1,6 @@
 # TODO: This does not work currently, needs fixing
 
-# from devices.base_sensor_manager import BaseSensorManager
+# from pi_tracker.sensors.base import BaseSensorManager
 # import time
 # from smbus2 import i2c_msg
 

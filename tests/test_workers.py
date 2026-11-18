@@ -4,7 +4,7 @@ try:
     import gi
     gi.require_version('GLib', '2.0')
     from gi.repository import GLib
-    import Thread
+    from pi_tracker import workers
 except (ImportError, ValueError):
     GLib = None
 
@@ -36,8 +36,8 @@ class GuardedTimerTest(unittest.TestCase):
                 raise OSError(121, 'Remote I/O error')
             return True
 
-        timer = Thread.StoppableRestartableGiThread(target=flaky)
-        with self.assertLogs('Thread', 'ERROR'):
+        timer = workers.StoppableRestartableGiThread(target=flaky)
+        with self.assertLogs('pi_tracker.workers', 'ERROR'):
             timer.start(1)
             run_loop_until(lambda: len(calls) >= 2)
         timer.stop()
@@ -47,8 +47,8 @@ class GuardedTimerTest(unittest.TestCase):
         def broken():
             raise OSError(121, 'Remote I/O error')
 
-        timer = Thread.StoppableRestartableGiThread(target=broken)
-        with self.assertLogs('Thread', 'ERROR') as logs:
+        timer = workers.StoppableRestartableGiThread(target=broken)
+        with self.assertLogs('pi_tracker.workers', 'ERROR') as logs:
             for _ in range(10):
                 self.assertTrue(timer._run())
         self.assertEqual(len(logs.output), 2)
@@ -61,8 +61,8 @@ class GuardedTimerTest(unittest.TestCase):
         def broken():
             raise errors.pop(0)
 
-        timer = Thread.StoppableRestartableGiThread(target=broken)
-        with self.assertLogs('Thread', 'ERROR') as logs:
+        timer = workers.StoppableRestartableGiThread(target=broken)
+        with self.assertLogs('pi_tracker.workers', 'ERROR') as logs:
             timer._run()
             timer._run()
         self.assertEqual(len(logs.output), 2)
@@ -76,8 +76,8 @@ class GuardedTimerTest(unittest.TestCase):
                 raise result
             return result
 
-        timer = Thread.StoppableRestartableGiThread(target=sometimes)
-        with self.assertLogs('Thread', 'INFO') as logs:
+        timer = workers.StoppableRestartableGiThread(target=sometimes)
+        with self.assertLogs('pi_tracker.workers', 'INFO') as logs:
             timer._run()
             self.assertTrue(timer._run())
         self.assertIn('works again after 1 failures', logs.output[-1])
@@ -89,12 +89,12 @@ class GuardedTimerTest(unittest.TestCase):
             calls.append(1)
             return False
 
-        timer = Thread.StoppableRestartableGiThread(target=once)
+        timer = workers.StoppableRestartableGiThread(target=once)
         timer.start(1)
         run_loop_until(lambda: calls)
         self.assertFalse(timer.is_running())
         # GLib already removed the source, so stop() must not try again
-        with self.assertLogs('Thread', 'WARNING') as logs:
+        with self.assertLogs('pi_tracker.workers', 'WARNING') as logs:
             timer.stop()
         self.assertIn('already stopped', logs.output[0])
 

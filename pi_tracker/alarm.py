@@ -10,8 +10,8 @@ States: 0 un-armed, 1 armed, 3 panic. Nothing sets panic yet and 2 is not
 assigned.
 
 main.py loads the saved state at start-up into `current`. Other modules use
-`alarm.current`; don't use `from alarm import current`, that copy would never
-see the loaded state.
+`alarm.current`; don't use `from pi_tracker.alarm import current`, that copy
+would never see the loaded state.
 """
 import datetime
 import json

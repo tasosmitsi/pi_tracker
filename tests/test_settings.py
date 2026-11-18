@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-import settings
+from pi_tracker import settings
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -20,7 +20,7 @@ class LoadTest(unittest.TestCase):
             f.write(text)
 
     def test_missing_file_gives_the_defaults(self):
-        with self.assertLogs('settings', 'WARNING'):
+        with self.assertLogs('pi_tracker.settings', 'WARNING'):
             loaded = settings.load(self.path)
         self.assertEqual(loaded, settings.Settings())
 
@@ -34,14 +34,14 @@ class LoadTest(unittest.TestCase):
 
     def test_unknown_key_is_reported_and_ignored(self):
         self.write('mqtt:\n  hots: typo\n')
-        with self.assertLogs('settings', 'WARNING') as logs:
+        with self.assertLogs('pi_tracker.settings', 'WARNING') as logs:
             loaded = settings.load(self.path)
         self.assertIn('mqtt.hots', logs.output[0])
         self.assertEqual(loaded.mqtt, settings.MqttSettings())
 
     def test_wrong_type_keeps_the_default(self):
         self.write('mqtt:\n  port: "4433"\n  retain: 1\n')
-        with self.assertLogs('settings', 'WARNING') as logs:
+        with self.assertLogs('pi_tracker.settings', 'WARNING') as logs:
             loaded = settings.load(self.path)
         self.assertEqual(len(logs.output), 2)
         self.assertEqual(loaded.mqtt.port, 4433)
@@ -49,7 +49,7 @@ class LoadTest(unittest.TestCase):
 
     def test_true_is_not_accepted_as_a_number(self):
         self.write('intervals:\n  telemetry_s: true\n')
-        with self.assertLogs('settings', 'WARNING'):
+        with self.assertLogs('pi_tracker.settings', 'WARNING'):
             loaded = settings.load(self.path)
         self.assertEqual(loaded.intervals.telemetry_s, 5)
 
@@ -61,7 +61,7 @@ class LoadTest(unittest.TestCase):
 
     def test_broken_yaml_gives_the_defaults(self):
         self.write('mqtt: [unclosed\n')
-        with self.assertLogs('settings', 'ERROR'):
+        with self.assertLogs('pi_tracker.settings', 'ERROR'):
             loaded = settings.load(self.path)
         self.assertEqual(loaded, settings.Settings())
 
@@ -71,13 +71,13 @@ class LoadTest(unittest.TestCase):
 
     def test_section_that_is_not_a_mapping_gives_its_defaults(self):
         self.write('mqtt: 42\nintervals:\n  telemetry_s: 10\n')
-        with self.assertLogs('settings', 'ERROR'):
+        with self.assertLogs('pi_tracker.settings', 'ERROR'):
             loaded = settings.load(self.path)
         self.assertEqual(loaded.mqtt, settings.MqttSettings())
         self.assertEqual(loaded.intervals.telemetry_s, 10)
 
     def test_the_config_yml_in_the_repo_loads_without_complaints(self):
-        with self.assertNoLogs('settings', 'WARNING'):
+        with self.assertNoLogs('pi_tracker.settings', 'WARNING'):
             settings.load(os.path.join(REPO, 'config.yml'))
 
 

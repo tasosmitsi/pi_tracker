@@ -5,7 +5,7 @@ import threading
 import unittest
 from unittest import mock
 
-import alarm
+from pi_tracker import alarm
 
 
 class AlarmStateTest(unittest.TestCase):
@@ -27,7 +27,7 @@ class AlarmStateTest(unittest.TestCase):
             return json.load(f)
 
     def test_first_start_without_a_file_is_disarmed(self):
-        with self.assertLogs('alarm', 'INFO'):
+        with self.assertLogs('pi_tracker.alarm', 'INFO'):
             state = alarm.AlarmState(self.path)
         self.assertEqual(state.state, alarm.DISARMED)
         self.assertFalse(os.path.exists(self.path))
@@ -61,13 +61,13 @@ class AlarmStateTest(unittest.TestCase):
                      '{"alarm_state": 2}', '{"alarm_state": true}', '{"alarm_state": 1.0}'):
             with self.subTest(text=text):
                 self.write(text)
-                with self.assertLogs('alarm', 'ERROR'):
+                with self.assertLogs('pi_tracker.alarm', 'ERROR'):
                     self.assertEqual(alarm.AlarmState(self.path).state, alarm.ARMED)
 
     def test_a_failed_save_keeps_the_new_state_until_restart(self):
         state = alarm.AlarmState(self.path)
-        with mock.patch('alarm._write_atomically', side_effect=OSError(30, 'Read-only file system')):
-            with self.assertLogs('alarm', 'ERROR'):
+        with mock.patch('pi_tracker.alarm._write_atomically', side_effect=OSError(30, 'Read-only file system')):
+            with self.assertLogs('pi_tracker.alarm', 'ERROR'):
                 self.assertTrue(state.arm())
         self.assertEqual(state.state, alarm.ARMED)
 

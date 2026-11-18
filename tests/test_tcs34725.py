@@ -55,7 +55,7 @@ class FakeTCS34725:
 
 def first_reading(chip):
     """Start the driver the way main.py does and return its first reading."""
-    from devices.TCS34725 import TCS34725_manager as driver
+    from pi_tracker.sensors import tcs34725 as driver
     with mock.patch.object(driver, 'time', types.SimpleNamespace(sleep=chip.sleep)), \
             mock.patch.object(driver, 'DigitalInputDevice'):
         with driver.TCS34725(chip, 0x29) as sensor:
@@ -77,7 +77,7 @@ class FirstReadingTest(unittest.TestCase):
                 self.assertEqual(first_reading(FakeTCS34725(**counts))['CT'], 0)
 
     def test_a_sensor_that_never_finishes_a_reading_only_warns(self):
-        with self.assertLogs('devices.TCS34725.TCS34725_manager', 'WARNING'):
+        with self.assertLogs('pi_tracker.sensors.tcs34725', 'WARNING'):
             data = first_reading(FakeTCS34725(C=3000, R=1000, G=1200, B=500, stuck=True))
         self.assertEqual(data['CT'], 0)
 

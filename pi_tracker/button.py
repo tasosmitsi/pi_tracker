@@ -6,7 +6,7 @@ can't switch the alarm off. Disarming is done remotely over MQTT.
 """
 import logging
 
-from actions import arm_alarm
+from pi_tracker.actions import arm_alarm
 
 log = logging.getLogger(__name__)
 

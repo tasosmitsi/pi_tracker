@@ -1,6 +1,6 @@
 import unittest
 
-from devices.SGM58031.SGM58031_manager import SGM58031
+from pi_tracker.sensors.sgm58031 import SGM58031
 
 
 class FakeADC:
