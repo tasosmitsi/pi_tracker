@@ -33,8 +33,7 @@ aren't installed.
       log_setup.py       logging to stderr
       net/
         mqtt.py          MQTT client, publishing, commands
-        modem.py         ModemManager: the modem and its GPS
-        modem_signals.py D-Bus signal listener (unused)
+        modem.py         ModemManager: finds the modem and follows it, GPS on/off
       sensors/
         base.py          base class for the I2C sensor drivers
         i2c_bus.py       the shared I2C bus

@@ -10,7 +10,7 @@ from pijuice import PiJuice
 
 from pi_tracker import alarm, log_setup, settings
 from pi_tracker.button import check_button
-from pi_tracker.net.modem import modem_init
+from pi_tracker.net.modem import ModemWatcher
 from pi_tracker.net.mqtt import mqtt_ini, mqtt_stop, post_message
 from pi_tracker.sensor_loop import SensorLoop
 from pi_tracker.sensors.i2c_bus import I2CBusManager
@@ -37,11 +37,11 @@ def signal_handler(sig, frame):
 
 def idle_function(delay, stop_event):
     intervals = settings.current.intervals
-    try:
-        modem, modem_location = modem_init()
-    except Exception as e:
-        log.warning("Modem could be disconnected: %s", e)
-        
+    # The modem is optional: picked up whenever ModemManager reports one, and
+    # followed through resets; see pi_tracker/net/modem.py
+    modem = ModemWatcher()
+    modem.start()
+
     with PiJuice(1, PI_JUICE_I2C_ADDRESS) as pijuice:
         mqtt_client = mqtt_ini()
         started_threads = []
