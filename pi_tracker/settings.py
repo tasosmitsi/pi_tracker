@@ -27,6 +27,8 @@ class MqttSettings:
     keyfile: str = 'certs/client_private.key'
     reconnect_min_s: int = 1            # wait before retrying a connection; it doubles after each failure...
     reconnect_max_s: int = 120          # ...up to this
+    session_expiry_s: int = 604800      # while offline, the broker keeps the session and queues QoS 1 commands this long
+    will_delay_s: int = 30              # the broker waits this long before publishing the offline Last Will
 
 
 @dataclasses.dataclass(frozen=True)

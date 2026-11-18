@@ -5,6 +5,8 @@ import ssl
 
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import MQTTProtocolVersion
+from paho.mqtt.packettypes import PacketTypes
+from paho.mqtt.properties import Properties
 
 from pi_tracker import alarm, settings
 from pi_tracker.actions import arm_alarm, disarm_alarm
@@ -48,14 +50,22 @@ def mqtt_ini():
     client.on_message = _log_errors(on_message)
 
     # Last Will: the broker publishes this itself when the tracker vanishes without
-    # disconnecting (power cut, theft, no coverage), within 1.5 x keepalive_s.
+    # disconnecting (power cut, theft, no coverage), within 1.5 x keepalive_s plus
+    # will_delay_s. It skips it if the tracker is back within will_delay_s.
     # on_connect sets the status back to online.
-    client.will_set(_status_topic(), 'offline', qos=1, retain=True)
+    will = Properties(PacketTypes.WILLMESSAGE)
+    will.WillDelayInterval = cfg.will_delay_s
+    client.will_set(_status_topic(), 'offline', qos=1, retain=True, properties=will)
+
+    # Keep the session when the connection drops, also across restarts: the broker
+    # queues QoS 1 commands for us for up to session_expiry_s.
+    session = Properties(PacketTypes.CONNECT)
+    session.SessionExpiryInterval = cfg.session_expiry_s
 
     # Don't wait for the broker. paho connects in its own thread and keeps
     # retrying, waiting longer after each failure, also when a connection drops.
     client.reconnect_delay_set(min_delay=cfg.reconnect_min_s, max_delay=cfg.reconnect_max_s)
-    client.connect_async(cfg.host, cfg.port, cfg.keepalive_s)
+    client.connect_async(cfg.host, cfg.port, cfg.keepalive_s, clean_start=False, properties=session)
     client.loop_start()
     return client
 
@@ -142,12 +152,18 @@ def on_connect(client, userdata, flags, reason_code, properties):
         _connection.failed(ConnectionRefusedError("the broker refused: %s" % reason_code))
         return
     _connection.succeeded()
-    log.info("Connected to the MQTT broker at %s:%s", cfg.host, cfg.port)
+    log.info("Connected to the MQTT broker at %s:%s (%s session)",
+             cfg.host, cfg.port, 'resumed' if flags.session_present else 'new')
+    granted = getattr(properties, 'SessionExpiryInterval', None)  # only sent when the broker lowers it
+    if granted is not None and granted < cfg.session_expiry_s:
+        log.warning("The broker keeps the session for %s s, not %s s: commands sent while offline "
+                    "are lost after that", granted, cfg.session_expiry_s)
     client.publish(_status_topic(), 'online', qos=1, retain=True)  # replaces the retained Last Will
 
-    # Subscribe on every connect, so the subscription is back after a reconnect
+    # Subscribe on every connect, in case the broker lost the session. QoS 1:
+    # brokers only queue QoS 1 and 2 messages for a client that's offline.
     topic = cfg.client_id + "/command/#"
-    result, _ = client.subscribe(topic)
+    result, _ = client.subscribe(topic, qos=1)
     if result != mqtt.MQTT_ERR_SUCCESS:
         log.error("Can't subscribe to %s: %s", topic, mqtt.error_string(result))
 

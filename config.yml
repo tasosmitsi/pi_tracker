@@ -13,6 +13,8 @@ mqtt:
   keyfile: certs/client_private.key
   reconnect_min_s: 1           # wait before retrying a connection; it doubles after each failure...
   reconnect_max_s: 120         # ...up to this
+  session_expiry_s: 604800     # while offline, the broker queues QoS 1 commands for up to 7 days
+  will_delay_s: 30             # status goes offline only after this long without a connection
 
 intervals:
   telemetry_s: 5               # whole seconds

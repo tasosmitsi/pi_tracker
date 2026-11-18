@@ -11,6 +11,8 @@ HAVE_PAHO = importlib.util.find_spec('paho') is not None
 
 SUCCESS = types.SimpleNamespace(is_failure=False)
 FAILURE = types.SimpleNamespace(is_failure=True)
+NEW_SESSION = types.SimpleNamespace(session_present=False)  # like paho's ConnectFlags
+RESUMED_SESSION = types.SimpleNamespace(session_present=True)
 
 
 class FakeClient:
@@ -29,7 +31,7 @@ class FakeClient:
         return FakeMessageInfo(self.calls)
 
     def subscribe(self, topic, qos=0):
-        self.subscribed.append(topic)
+        self.subscribed.append((topic, qos))
         return 0, len(self.subscribed)  # like paho: (MQTT_ERR_SUCCESS, message id)
 
     def disconnect(self):
@@ -92,8 +94,8 @@ class TopicsFollowTheSettingsTest(MqttTestCase):
         self.assertEqual(self.client.published[0][0], 'bike1/errors')
 
     def test_subscribes_under_the_configured_client_id(self):
-        self.mqtt.on_connect(self.client, None, None, SUCCESS, None)
-        self.assertEqual(self.client.subscribed, ['bike1/command/#'])
+        self.mqtt.on_connect(self.client, None, NEW_SESSION, SUCCESS, None)
+        self.assertEqual(self.client.subscribed, [('bike1/command/#', 1)])  # QoS 1, so the broker queues commands
 
 
 class ConnectionTest(MqttTestCase):
@@ -102,7 +104,8 @@ class ConnectionTest(MqttTestCase):
             client = self.mqtt.mqtt_ini()
         self.assertIs(client, client_class.return_value)
         client.reconnect_delay_set.assert_called_once_with(min_delay=1, max_delay=120)
-        client.connect_async.assert_called_once_with('192.168.178.203', 4433, 60)
+        client.connect_async.assert_called_once()
+        self.assertEqual(client.connect_async.call_args.args, ('192.168.178.203', 4433, 60))
         client.loop_start.assert_called_once_with()
         client.connect.assert_not_called()
 
@@ -121,14 +124,14 @@ class ConnectionTest(MqttTestCase):
 
     def test_a_refused_connection_is_logged_and_nothing_is_subscribed(self):
         with self.assertLogs('pi_tracker.net.mqtt', 'ERROR') as logs:
-            self.mqtt.on_connect(self.client, None, None, FAILURE, None)
+            self.mqtt.on_connect(self.client, None, NEW_SESSION, FAILURE, None)
         self.assertIn('the broker refused', logs.output[0])
         self.assertEqual(self.client.subscribed, [])
 
     def test_connecting_after_failures_is_logged(self):
         with self.assertLogs('pi_tracker.net.mqtt', 'INFO') as logs:
             self.mqtt.on_connect_fail(self.client, None)
-            self.mqtt.on_connect(self.client, None, None, SUCCESS, None)
+            self.mqtt.on_connect(self.client, None, NEW_SESSION, SUCCESS, None)
         self.assertIn('works again after 1 failures', logs.output[-2])
         self.assertIn('Connected to the MQTT broker at 192.168.178.203:4433', logs.output[-1])
 
@@ -142,12 +145,16 @@ class StatusTest(MqttTestCase):
     def test_the_last_will_says_offline_and_is_set_before_connecting(self):
         with mock.patch.object(self.mqtt.mqtt, 'Client'):
             client = self.mqtt.mqtt_ini()
-        client.will_set.assert_called_once_with('bike1/status', 'offline', qos=1, retain=True)
+        client.will_set.assert_called_once()
+        args, kwargs = client.will_set.call_args
+        self.assertEqual(args, ('bike1/status', 'offline'))
+        self.assertEqual((kwargs['qos'], kwargs['retain']), (1, True))
+        self.assertEqual(kwargs['properties'].WillDelayInterval, 30)
         calls = [name for name, args, kwargs in client.method_calls]
         self.assertLess(calls.index('will_set'), calls.index('connect_async'))
 
     def test_connecting_says_online(self):
-        self.mqtt.on_connect(self.client, None, None, SUCCESS, None)
+        self.mqtt.on_connect(self.client, None, NEW_SESSION, SUCCESS, None)
         self.assertIn(('bike1/status', 'online', 1, True), self.client.published)
 
     def test_stopping_says_offline_before_disconnecting(self):
@@ -159,6 +166,26 @@ class StatusTest(MqttTestCase):
         self.client.connected = False
         self.mqtt.mqtt_stop(self.client)
         self.assertEqual(self.client.calls, ['disconnect', 'loop_stop'])
+
+
+class SessionTest(MqttTestCase):
+    def test_the_session_is_kept_across_disconnects_and_restarts(self):
+        with mock.patch.object(self.mqtt.mqtt, 'Client'):
+            client = self.mqtt.mqtt_ini()
+        kwargs = client.connect_async.call_args.kwargs
+        self.assertIs(kwargs['clean_start'], False)
+        self.assertEqual(kwargs['properties'].SessionExpiryInterval, 604800)
+
+    def test_a_resumed_session_is_logged(self):
+        with self.assertLogs('pi_tracker.net.mqtt', 'INFO') as logs:
+            self.mqtt.on_connect(self.client, None, RESUMED_SESSION, SUCCESS, None)
+        self.assertIn('(resumed session)', logs.output[0])
+
+    def test_a_shorter_session_from_the_broker_is_logged(self):
+        connack = types.SimpleNamespace(SessionExpiryInterval=7200)
+        with self.assertLogs('pi_tracker.net.mqtt', 'WARNING') as logs:
+            self.mqtt.on_connect(self.client, None, NEW_SESSION, SUCCESS, connack)
+        self.assertIn('keeps the session for 7200 s, not 604800 s', logs.output[0])
 
 
 class CallbackErrorsTest(MqttTestCase):
