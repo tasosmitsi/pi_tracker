@@ -26,7 +26,7 @@ aren't installed.
       actions.py         arm_alarm / disarm_alarm
       button.py          PiJuice SW1: a single press arms
       telemetry.py       the telemetry callback and the stats it publishes
-      sensor_loop.py     reads the sensors in turn; one that fails is skipped for that round
+      sensor_loop.py     starts and reads the sensors; one that fails is tried again next round
       workers.py         the sensor-loop thread and the GLib timer wrapper
       failure_log.py     logs a job that keeps failing without flooding the log
       settings.py        settings from config.yml, with a default for each

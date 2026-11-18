@@ -14,9 +14,10 @@ DATA = {0x14: 'C', 0x16: 'R', 0x18: 'G', 0x1A: 'B'}
 class FakeTCS34725:
     """Registers on a fake clock: after AEN is set, the data read 0 until the first integration has ended."""
 
-    def __init__(self, C, R, G, B, stuck=False):
+    def __init__(self, C, R, G, B, stuck=False, failed_reads=0):
         self.counts = {'C': C, 'R': R, 'G': G, 'B': B}
         self.stuck = stuck
+        self.failed_reads = failed_reads  # this many byte reads raise an I2C error first
         self.now = 0.0
         self.atime = 0xFF
         self.enable = 0
@@ -42,6 +43,9 @@ class FakeTCS34725:
             self.enable = value
 
     def read_byte_data(self, address, command):
+        if self.failed_reads:
+            self.failed_reads -= 1
+            raise OSError(5, 'Input/output error')
         register = command & 0x1F
         if register == ID:
             return 0x44
@@ -80,6 +84,19 @@ class FirstReadingTest(unittest.TestCase):
         with self.assertLogs('pi_tracker.sensors.tcs34725', 'WARNING'):
             data = first_reading(FakeTCS34725(C=3000, R=1000, G=1200, B=500, stuck=True))
         self.assertEqual(data['CT'], 0)
+
+    def test_starting_again_after_a_failed_start_keeps_the_interrupt_pin(self):
+        # gpiozero refuses a pin that's already in use, so a second start must not ask for it again
+        from pi_tracker.sensors import tcs34725 as driver
+        chip = FakeTCS34725(C=3000, R=1000, G=1200, B=500, failed_reads=1)
+        with mock.patch.object(driver, 'time', types.SimpleNamespace(sleep=chip.sleep)), \
+                mock.patch.object(driver, 'DigitalInputDevice') as pin:
+            sensor = driver.TCS34725(chip, 0x29)
+            with self.assertRaises(OSError):
+                sensor.initialize()
+            sensor.initialize()
+            self.assertEqual(sensor.read_data()['C'], 3000)
+        pin.assert_called_once()
 
 
 if __name__ == '__main__':

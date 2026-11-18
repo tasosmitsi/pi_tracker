@@ -1,9 +1,10 @@
 """
-The sensor loop: reads the Sense HAT sensors in turn, logs the readings at
-DEBUG and publishes the thermistor.
+The sensor loop: starts the Sense HAT sensors, reads them in turn, logs the
+readings at DEBUG and publishes the thermistor.
 
-A read that fails is logged and skipped for that round. The other sensors
-carry on, and the failed one is read again in the next round.
+A sensor that fails to start or to read is logged and skipped for that
+round. The other sensors carry on, and the failed one is tried again in the
+next round.
 """
 import json
 import logging
@@ -15,33 +16,58 @@ from pi_tracker.sensors import thermistor
 log = logging.getLogger(__name__)
 
 
+class _Step:
+    """One sensor in the loop: whether it has started, and its failures."""
+
+    def __init__(self, name, sensor, read):
+        self.name = name
+        self.sensor = sensor
+        self.read = read
+        self.started = False
+        self.failures = FailureLog(name, log)
+
+
 class SensorLoop:
-    """Reads each sensor once per round. `publish(topic, payload)` sends an MQTT message."""
+    """Starts and reads each sensor once per round. `publish(topic, payload)` sends an MQTT message."""
 
     def __init__(self, pressure, light, adc, publish, publish_every_s):
         self._steps = [
-            (pressure, self._read_pressure, FailureLog('LPS22HB read', log)),
-            (light, self._read_light, FailureLog('TCS34725 read', log)),
-            (adc, self._read_adc, FailureLog('SGM58031 read', log)),
+            _Step('LPS22HB', pressure, self._read_pressure),
+            _Step('TCS34725', light, self._read_light),
+            _Step('SGM58031', adc, self._read_adc),
         ]
         self._publish = publish
         self._publish_every_s = publish_every_s
         self._last_thermistor_post = None
 
     def run(self, stop_event, delay_s):
-        """Read round after round until `stop_event` is set."""
-        while not stop_event.is_set():
-            self.read_all()
-            stop_event.wait(delay_s)
+        """Read round after round until `stop_event` is set, then shut down the sensors that started."""
+        try:
+            while not stop_event.is_set():
+                self.read_all()
+                stop_event.wait(delay_s)
+        finally:
+            self._shutdown()
 
     def read_all(self):
-        for sensor, read, failures in self._steps:
+        for step in self._steps:
             try:
-                read(sensor)
+                if not step.started:
+                    step.sensor.initialize()
+                    step.started = True
+                step.read(step.sensor)
             except Exception as e:
-                failures.failed(e)
+                step.failures.failed(e)
             else:
-                failures.succeeded()
+                step.failures.succeeded()
+
+    def _shutdown(self):
+        for step in self._steps:
+            if step.started:
+                try:
+                    step.sensor.shutdown()
+                except Exception as e:
+                    log.warning("%s didn't shut down cleanly: %s", step.name, e)
 
     def _read_pressure(self, sensor):
         log.debug("LPS22HB %s", sensor.read_data())

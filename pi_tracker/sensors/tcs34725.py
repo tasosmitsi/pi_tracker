@@ -20,6 +20,7 @@ TCS34725_CT_Offset = 1391.0
 class TCS34725(BaseSensorManager):
     Gain_t = 0
     IntegrationTime_t = 0
+    INT = None  # the interrupt pin, created by initialize()
 
     TCS34725_CMD_BIT = 0x80
     TCS34725_CMD_Read_Byte = 0x00
@@ -114,9 +115,11 @@ class TCS34725(BaseSensorManager):
         # read debug option from base class
         self.debug = self._options.get('debug', False)
         
-        # Set GPIO mode
-        self.INT = DigitalInputDevice(
-            INT_PORT, pull_up=True, active_state=None)
+        # Set GPIO mode, once: a start that failed further down is tried again
+        # later, and gpiozero won't hand out the same pin twice
+        if self.INT is None:
+            self.INT = DigitalInputDevice(
+                INT_PORT, pull_up=True, active_state=None)
         if (self.debug):
             print("Reseting TSL2581")
 

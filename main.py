@@ -59,13 +59,12 @@ def idle_function(delay, stop_event):
         thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(intervals.telemetry_s)
         started_threads.append(thread_telemetry)
 
-        with I2CBusManager(smbus2, 1) as bus, \
-            LPS22HB(bus, LPS22HB_I2C_ADDRESS) as pressure_sensor, \
-            TCS34725(bus, TCS34725_I2C_ADDRESS) as light_sensor, \
-            SGM58031(bus, SGM_I2C_ADDRESS) as adc_sensor:
-
-            # A sensor that fails is skipped for that round; see pi_tracker/sensor_loop.py
-            sensor_loop = SensorLoop(pressure_sensor, light_sensor, adc_sensor,
+        with I2CBusManager(smbus2, 1) as bus:
+            # The loop starts the sensors itself. One that fails to start or to read
+            # is skipped for that round and tried again; see pi_tracker/sensor_loop.py
+            sensor_loop = SensorLoop(LPS22HB(bus, LPS22HB_I2C_ADDRESS),
+                                     TCS34725(bus, TCS34725_I2C_ADDRESS),
+                                     SGM58031(bus, SGM_I2C_ADDRESS),
                                      publish=functools.partial(post_message, mqtt_client),
                                      publish_every_s=intervals.telemetry_s)
             sensor_loop.run(stop_event, delay)
