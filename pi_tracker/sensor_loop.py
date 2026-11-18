@@ -58,14 +58,15 @@ class SensorLoop:
         self._thermistor(adc)
 
     def _thermistor(self, adc):
-        # Thermistor experiment: NTC divider on AIN3, see pi_tracker/sensors/thermistor.py
-        volts = adc['AIN3'] / 1000
+        # Thermistor experiment: wiring and circuit values are in pi_tracker/sensors/thermistor.py
+        channel, millivolts = thermistor.CHANNEL, adc[thermistor.CHANNEL]
+        volts = millivolts / 1000
         ohms = thermistor.resistance(volts)
         if ohms is None:
-            log.debug("Thermistor: AIN3 at %.1f mV, open or shorted?", adc['AIN3'])
+            log.debug("Thermistor: %s at %.1f mV, open or shorted?", channel, millivolts)
             return
         temp_c = thermistor.temperature_c(ohms)
-        log.debug("Thermistor %.2f °C (AIN3 %.1f mV, %.0f ohm)", temp_c, adc['AIN3'], ohms)
+        log.debug("Thermistor %.2f °C (%s %.1f mV, %.0f ohm)", temp_c, channel, millivolts, ohms)
         now = time.monotonic()
         if self._last_thermistor_post is None or now - self._last_thermistor_post >= self._publish_every_s:
             self._publish('telemetry/thermistor', json.dumps({

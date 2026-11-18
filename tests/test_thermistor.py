@@ -32,12 +32,24 @@ class ThermistorTest(unittest.TestCase):
 
     def test_the_defaults_match_the_saddle_circuit(self):
         # 10k divider, NTC to ground: half the supply is 25 °C
-        self.assertAlmostEqual(thermistor.temperature_c(thermistor.resistance(1.65)), 25.0, places=6)
+        half = thermistor.SUPPLY_V / 2
+        self.assertAlmostEqual(thermistor.temperature_c(thermistor.resistance(half)), 25.0, places=6)
 
     def test_open_or_shorted_gives_none(self):
         for volts in (-0.01, 0, 3.3, 3.4):
             with self.subTest(volts=volts):
                 self.assertIsNone(thermistor.resistance(volts, 3.3, 10000, True))
+
+    def test_readings_near_a_rail_count_as_open_or_shorted(self):
+        # Your unplugged NTC read 3.286 V; against a 3.3 V supply that came out as -62 °C
+        for volts in (3.286, 0.02):
+            with self.subTest(volts=volts):
+                self.assertIsNone(thermistor.resistance(volts, 3.3, 10000, True))
+
+    def test_readings_just_inside_the_margin_still_count(self):
+        for volts in (3.25, 0.05):  # about 1.5 % from the rails
+            with self.subTest(volts=volts):
+                self.assertIsNotNone(thermistor.resistance(volts, 3.3, 10000, True))
 
     def test_divider_voltage_to_temperature(self):
         ohms = beta_resistance(10)

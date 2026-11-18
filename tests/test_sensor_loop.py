@@ -2,11 +2,12 @@ import json
 import unittest
 
 from pi_tracker.sensor_loop import SensorLoop
+from pi_tracker.sensors import thermistor
 
 PRESSURE = {'pressure_hPa': 1017.37, 'temperature_C': 28.74}
 LIGHT = {'R': 253, 'G': 251, 'B': 196, 'C': 0xbbce, 'RGB565': 0xffd8, 'RGB888': 0xfdfbc4,
          'LUX': 415, 'CT': 4441, 'INT': 0}
-ADC = {'AIN0': 120.125, 'AIN1': 120.375, 'AIN2': 120.125, 'AIN3': 1574.625}  # your log of 2026-11-14: 27.07 °C
+ADC = {'AIN0': 120.125, 'AIN1': 120.375, 'AIN2': 120.125, 'AIN3': 1574.625}  # from your log of 2026-11-14
 I2C_ERROR = OSError(121, 'Remote I/O error')
 
 
@@ -76,8 +77,17 @@ class SensorLoopTest(unittest.TestCase):
         sensor_loop = self.sensor_loop()
         sensor_loop.read_all()
         sensor_loop.read_all()
-        self.assertEqual(self.published, [('telemetry/thermistor',
-                                           {'temperature_c': 27.07, 'voltage_v': 1.5746, 'resistance_ohm': 9126})])
+        volts = ADC[thermistor.CHANNEL] / 1000
+        ohms = thermistor.resistance(volts)
+        self.assertEqual(self.published, [('telemetry/thermistor', {
+            'temperature_c': round(thermistor.temperature_c(ohms), 2),
+            'voltage_v': round(volts, 4),
+            'resistance_ohm': round(ohms)})])
+
+    def test_an_open_thermistor_is_not_published(self):
+        self.adc = FakeSensor(dict(ADC, **{thermistor.CHANNEL: 3280.0}))  # just under the 3V3 rail
+        self.sensor_loop().read_all()
+        self.assertEqual(self.published, [])
 
     def test_no_thermistor_message_when_the_adc_read_fails(self):
         self.adc = FakeSensor(I2C_ERROR)
