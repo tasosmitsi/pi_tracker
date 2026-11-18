@@ -33,7 +33,7 @@ class FakeClient:
 class FakeMessage:
     def __init__(self, topic, payload, qos=1):
         self.topic = topic
-        self.payload = payload.encode()
+        self.payload = payload if isinstance(payload, bytes) else payload.encode()
         self.qos = qos
 
 
@@ -119,6 +119,23 @@ class ConnectionTest(MqttTestCase):
         with self.assertLogs('pi_tracker.net.mqtt', 'WARNING') as logs:
             self.mqtt.on_disconnect(self.client, None, None, FAILURE, None)
         self.assertIn('Lost the connection', logs.output[0])
+
+
+class CallbackErrorsTest(MqttTestCase):
+    def test_every_callback_is_wrapped(self):
+        with mock.patch.object(self.mqtt.mqtt, 'Client'):
+            client = self.mqtt.mqtt_ini()
+        for name in ('on_connect', 'on_connect_fail', 'on_disconnect', 'on_subscribe', 'on_unsubscribe', 'on_message'):
+            with self.subTest(name):
+                self.assertIs(getattr(client, name).__wrapped__, getattr(self.mqtt, name))
+
+    def test_a_failing_callback_is_logged_instead_of_raised(self):
+        # The command that stopped paho's network thread: a payload that isn't UTF-8
+        on_message = self.mqtt._log_errors(self.mqtt.on_message)
+        with self.assertLogs('pi_tracker.net.mqtt', 'ERROR') as logs:
+            on_message(self.client, None, FakeMessage('bike1/command', b'\xff\xfe'))
+        self.assertIn('MQTT on_message failed', logs.output[0])
+        self.assertIn('UnicodeDecodeError', logs.output[0])
 
 
 if __name__ == '__main__':

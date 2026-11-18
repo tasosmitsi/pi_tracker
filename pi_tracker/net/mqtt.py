@@ -1,4 +1,5 @@
 import fnmatch
+import functools
 import logging
 import ssl
 
@@ -39,12 +40,12 @@ def mqtt_ini():
 
     client.tls_insecure_set(False)  # Set to False to verify server certificate
     
-    client.on_connect = on_connect
-    client.on_connect_fail = on_connect_fail
-    client.on_disconnect = on_disconnect
-    client.on_subscribe = on_subscribe
-    client.on_unsubscribe = on_unsubscribe
-    client.on_message = on_message
+    client.on_connect = _log_errors(on_connect)
+    client.on_connect_fail = _log_errors(on_connect_fail)
+    client.on_disconnect = _log_errors(on_disconnect)
+    client.on_subscribe = _log_errors(on_subscribe)
+    client.on_unsubscribe = _log_errors(on_unsubscribe)
+    client.on_message = _log_errors(on_message)
 
     # Don't wait for the broker. paho connects in its own thread and keeps
     # retrying, waiting longer after each failure, also when a connection drops.
@@ -52,6 +53,17 @@ def mqtt_ini():
     client.connect_async(cfg.host, cfg.port, cfg.keepalive_s)
     client.loop_start()
     return client
+
+
+def _log_errors(callback):
+    """`callback`, logging its exceptions instead of raising them: paho stops its network thread on an exception."""
+    @functools.wraps(callback)
+    def wrapper(*args):
+        try:
+            return callback(*args)
+        except Exception:
+            log.exception("MQTT %s failed", callback.__name__)
+    return wrapper
 
 
 def post_message(mqtt_client, publish_topic, publish_message):
