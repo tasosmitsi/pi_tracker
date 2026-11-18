@@ -19,14 +19,16 @@ Tests that need paho-mqtt, PyGObject or gpiozero skip themselves where those
 aren't installed.
 
 ## Layout
-    main.py              entry point: wiring, the sensor loop, the GLib main loop
+    main.py              entry point: wiring and the GLib main loop
     config.yml           settings; anything left out falls back to pi_tracker/settings.py
     pi_tracker/
       alarm.py           alarm state, saved to alarm.json on every change
       actions.py         arm_alarm / disarm_alarm
       button.py          PiJuice SW1: a single press arms
       telemetry.py       the telemetry callback and the stats it publishes
+      sensor_loop.py     reads the sensors in turn; one that fails is skipped for that round
       workers.py         the sensor-loop thread and the GLib timer wrapper
+      failure_log.py     logs a job that keeps failing without flooding the log
       settings.py        settings from config.yml, with a default for each
       log_setup.py       logging to stderr
       net/

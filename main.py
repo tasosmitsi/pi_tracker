@@ -1,6 +1,5 @@
 import sys
-import time
-import json
+import functools
 import signal
 import logging
 import os
@@ -13,7 +12,7 @@ from pi_tracker import alarm, log_setup, settings
 from pi_tracker.button import check_button
 from pi_tracker.net.modem import modem_init
 from pi_tracker.net.mqtt import mqtt_ini, post_message
-from pi_tracker.sensors import thermistor
+from pi_tracker.sensor_loop import SensorLoop
 from pi_tracker.sensors.i2c_bus import I2CBusManager
 from pi_tracker.sensors.lps22hb import LPS22HB
 from pi_tracker.sensors.sgm58031 import SGM58031
@@ -65,34 +64,11 @@ def idle_function(delay, stop_event):
             TCS34725(bus, TCS34725_I2C_ADDRESS) as light_sensor, \
             SGM58031(bus, SGM_I2C_ADDRESS) as adc_sensor:
 
-            last_thermistor_post = 0.0  # thermistor experiment
-            while not stop_event.is_set():
-                # main loop!
-                log.debug("LPS22HB %s", pressure_sensor.read_data())
-                data = light_sensor.read_data()
-                log.debug("TCS34725 R: %d G: %d B: %d C: %#x RGB565: %#x RGB888: %#x LUX: %d CT: %dK INT: %d",
-                          data['R'], data['G'], data['B'], data['C'], data['RGB565'],
-                          data['RGB888'], data['LUX'], data['CT'], data['INT'])
-                adc = adc_sensor.read_data()
-                log.debug("SGM58031 %s", adc)
-
-                # Thermistor experiment: NTC divider on AIN3, see pi_tracker/sensors/thermistor.py
-                volts = adc['AIN3'] / 1000
-                ohms = thermistor.resistance(volts)
-                if ohms is None:
-                    log.debug("Thermistor: AIN3 at %.1f mV, open or shorted?", adc['AIN3'])
-                else:
-                    temp_c = thermistor.temperature_c(ohms)
-                    log.debug("Thermistor %.2f °C (AIN3 %.1f mV, %.0f ohm)", temp_c, adc['AIN3'], ohms)
-                    if time.monotonic() - last_thermistor_post >= intervals.telemetry_s:
-                        post_message(mqtt_client, 'telemetry/thermistor', json.dumps({
-                            'temperature_c': round(temp_c, 2),
-                            'voltage_v': round(volts, 4),
-                            'resistance_ohm': round(ohms),
-                        }))
-                        last_thermistor_post = time.monotonic()
-
-                time.sleep(delay)
+            # A sensor that fails is skipped for that round; see pi_tracker/sensor_loop.py
+            sensor_loop = SensorLoop(pressure_sensor, light_sensor, adc_sensor,
+                                     publish=functools.partial(post_message, mqtt_client),
+                                     publish_every_s=intervals.telemetry_s)
+            sensor_loop.run(stop_event, delay)
 
         # Stop all started threads
         for thread in started_threads:
