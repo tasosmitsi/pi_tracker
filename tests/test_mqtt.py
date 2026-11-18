@@ -1,23 +1,33 @@
 import importlib.util
 import types
 import unittest
+from unittest import mock
 
 from pi_tracker import alarm, settings
+from pi_tracker.failure_log import FailureLog
 
 # pi_tracker/net/mqtt.py needs paho-mqtt.
 HAVE_PAHO = importlib.util.find_spec('paho') is not None
+
+SUCCESS = types.SimpleNamespace(is_failure=False)
+FAILURE = types.SimpleNamespace(is_failure=True)
 
 
 class FakeClient:
     def __init__(self):
         self.published = []
         self.subscribed = []
+        self.connected = True
+
+    def is_connected(self):
+        return self.connected
 
     def publish(self, topic, payload, qos=0, retain=False):
         self.published.append((topic, payload, qos, retain))
 
     def subscribe(self, topic, qos=0):
         self.subscribed.append(topic)
+        return 0, len(self.subscribed)  # like paho: (MQTT_ERR_SUCCESS, message id)
 
 
 class FakeMessage:
@@ -28,18 +38,21 @@ class FakeMessage:
 
 
 @unittest.skipUnless(HAVE_PAHO, 'paho-mqtt is not installed')
-class TopicsFollowTheSettingsTest(unittest.TestCase):
+class MqttTestCase(unittest.TestCase):
     def setUp(self):
         from pi_tracker.net import mqtt
         self.mqtt = mqtt
-        self.saved = settings.current, alarm.current
+        self.saved = settings.current, alarm.current, mqtt._connection
         settings.current = settings.Settings(mqtt=settings.MqttSettings(client_id='bike1', qos=0))
         alarm.current = alarm.AlarmState()
+        mqtt._connection = FailureLog('MQTT connect', mqtt.log)
         self.client = FakeClient()
 
     def tearDown(self):
-        settings.current, alarm.current = self.saved
+        settings.current, alarm.current, self.mqtt._connection = self.saved
 
+
+class TopicsFollowTheSettingsTest(MqttTestCase):
     def test_published_topics_start_with_the_configured_client_id(self):
         self.mqtt.post_message(self.client, 'telemetry/x', 'v')
         self.assertEqual(self.client.published, [('bike1/telemetry/x', 'v', 0, False)])
@@ -62,9 +75,50 @@ class TopicsFollowTheSettingsTest(unittest.TestCase):
         self.assertEqual(self.client.published[0][0], 'bike1/errors')
 
     def test_subscribes_under_the_configured_client_id(self):
-        reason = types.SimpleNamespace(is_failure=False)
-        self.mqtt.on_connect(self.client, None, None, reason, None)
+        self.mqtt.on_connect(self.client, None, None, SUCCESS, None)
         self.assertEqual(self.client.subscribed, ['bike1/command/#'])
+
+
+class ConnectionTest(MqttTestCase):
+    def test_starting_does_not_wait_for_the_broker(self):
+        with mock.patch.object(self.mqtt.mqtt, 'Client') as client_class:
+            client = self.mqtt.mqtt_ini()
+        self.assertIs(client, client_class.return_value)
+        client.reconnect_delay_set.assert_called_once_with(min_delay=1, max_delay=120)
+        client.connect_async.assert_called_once_with('192.168.178.203', 4433, 60)
+        client.loop_start.assert_called_once_with()
+        client.connect.assert_not_called()
+
+    def test_nothing_is_published_while_disconnected(self):
+        self.client.connected = False
+        self.mqtt.post_message(self.client, 'telemetry/x', 'v')
+        self.assertEqual(self.client.published, [])
+
+    def test_failed_connections_are_logged_once_then_after_10(self):
+        with self.assertLogs('pi_tracker.net.mqtt', 'ERROR') as logs:
+            for _ in range(10):
+                self.mqtt.on_connect_fail(self.client, None)
+        self.assertEqual(len(logs.output), 2)
+        self.assertIn("can't reach 192.168.178.203:4433", logs.output[0])
+        self.assertIn('10 times in a row', logs.output[1])
+
+    def test_a_refused_connection_is_logged_and_nothing_is_subscribed(self):
+        with self.assertLogs('pi_tracker.net.mqtt', 'ERROR') as logs:
+            self.mqtt.on_connect(self.client, None, None, FAILURE, None)
+        self.assertIn('the broker refused', logs.output[0])
+        self.assertEqual(self.client.subscribed, [])
+
+    def test_connecting_after_failures_is_logged(self):
+        with self.assertLogs('pi_tracker.net.mqtt', 'INFO') as logs:
+            self.mqtt.on_connect_fail(self.client, None)
+            self.mqtt.on_connect(self.client, None, None, SUCCESS, None)
+        self.assertIn('works again after 1 failures', logs.output[-2])
+        self.assertIn('Connected to the MQTT broker at 192.168.178.203:4433', logs.output[-1])
+
+    def test_a_lost_connection_is_logged(self):
+        with self.assertLogs('pi_tracker.net.mqtt', 'WARNING') as logs:
+            self.mqtt.on_disconnect(self.client, None, None, FAILURE, None)
+        self.assertIn('Lost the connection', logs.output[0])
 
 
 if __name__ == '__main__':

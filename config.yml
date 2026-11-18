@@ -11,6 +11,8 @@ mqtt:
   ca_certs: certs/ca_certificate.crt
   certfile: certs/client_certificate.crt
   keyfile: certs/client_private.key
+  reconnect_min_s: 1           # wait before retrying a connection; it doubles after each failure...
+  reconnect_max_s: 120         # ...up to this
 
 intervals:
   telemetry_s: 5               # whole seconds

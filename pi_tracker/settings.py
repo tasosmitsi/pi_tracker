@@ -25,6 +25,8 @@ class MqttSettings:
     ca_certs: str = 'certs/ca_certificate.crt'
     certfile: str = 'certs/client_certificate.crt'
     keyfile: str = 'certs/client_private.key'
+    reconnect_min_s: int = 1            # wait before retrying a connection; it doubles after each failure...
+    reconnect_max_s: int = 120          # ...up to this
 
 
 @dataclasses.dataclass(frozen=True)
