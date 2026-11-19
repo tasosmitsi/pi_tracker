@@ -28,8 +28,36 @@ TCS34725_I2C_ADDRESS = 0x29
 SGM_I2C_ADDRESS = 0x48
 PI_JUICE_I2C_ADDRESS = 0x14
 
-def idle_function(delay, stop_event):
+def sensor_worker(mqtt_client, watchdog, stop_event):
+    """The worker thread: the sensor loop, until stop_event is set. Everything else is set up by main()."""
     intervals = settings.current.intervals
+    with I2CBusManager(smbus2, 1) as bus:
+        # The loop starts the sensors itself. One that fails to start or to read
+        # is skipped for that round and tried again; see pi_tracker/sensor_loop.py
+        sensor_loop = SensorLoop(LPS22HB(bus, LPS22HB_I2C_ADDRESS),
+                                 TCS34725(bus, TCS34725_I2C_ADDRESS),
+                                 SGM58031(bus, SGM_I2C_ADDRESS),
+                                 publish=functools.partial(post_message, mqtt_client),
+                                 publish_every_s=intervals.telemetry_s,
+                                 on_round=watchdog.round_done if watchdog else None)
+        sensor_loop.run(stop_event, intervals.sensor_loop_s)
+
+def main():
+    # Log at INFO while reading the settings, then switch to the configured level.
+    # PI_TRACKER_LOG_LEVEL overrides the level in config.yml.
+    log_setup.setup(os.environ.get('PI_TRACKER_LOG_LEVEL', 'INFO'))
+    settings.current = settings.load(CONFIG_FILE)
+    log_setup.setup(os.environ.get('PI_TRACKER_LOG_LEVEL') or settings.current.log.level)
+
+    # 0 for un-armed, 1 for armed, 3 panic. The state is saved on every change and
+    # read back here, so a restart doesn't disarm the tracker.
+    state_dir = os.path.expanduser(settings.current.state.directory)
+    alarm.current = alarm.AlarmState(os.path.join(state_dir, alarm.FILE_NAME))
+
+    # config.btn_state = {'data': {'SW1': 'NO_EVENT'}, 'error': 'NO_ERROR'}
+
+    intervals = settings.current.intervals
+
     # The modem is optional: picked up whenever ModemManager reports one, and
     # followed through resets; see pi_tracker/net/modem.py
     modem = ModemWatcher()
@@ -37,20 +65,14 @@ def idle_function(delay, stop_event):
 
     with PiJuice(1, PI_JUICE_I2C_ADDRESS) as pijuice:
         mqtt_client = mqtt_ini()
-        started_threads = []
+        timers = []  # GLib timers: their callbacks run on the main loop, one at a time
         try:
             # thread_post_modem = StoppableRestartableGiThread(target=post_modem, args=(mqtt_client, modem))
             # thread_post_battery = StoppableRestartableGiThread(target=post_battery, args=(mqtt_client, pijuice)).start(60)
-            # started_threads.append(thread_post_battery)
 
-            # Initiate the button thread and start it imediately, it will always be on.
             # A single press on SW1 arms the alarm.
-            thread_check_button = StoppableRestartableGiThread(target=check_button, args=(pijuice, )).start(intervals.button_poll_s)
-            started_threads.append(thread_check_button)
-
-            # Initiate the telemetry thread and start it imediately, it will always be on.
-            thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(intervals.telemetry_s)
-            started_threads.append(thread_telemetry)
+            timers.append(StoppableRestartableGiThread(target=check_button, args=(pijuice, )).start(intervals.button_poll_s))
+            timers.append(StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(intervals.telemetry_s))
 
             # Under systemd with WatchdogSec (deploy/pi-tracker@.service): fed from a GLib
             # timer while the sensor loop keeps finishing rounds, so a hang in either one
@@ -59,48 +81,21 @@ def idle_function(delay, stop_event):
             interval_s = systemd.watchdog_interval_s()
             if interval_s:
                 watchdog = systemd.Watchdog(max_round_age_s=interval_s)
-                thread_watchdog = StoppableRestartableGiThread(target=watchdog.feed).start(max(1, int(interval_s)))
-                started_threads.append(thread_watchdog)
+                timers.append(StoppableRestartableGiThread(target=watchdog.feed).start(max(1, int(interval_s))))
 
-            with I2CBusManager(smbus2, 1) as bus:
-                # The loop starts the sensors itself. One that fails to start or to read
-                # is skipped for that round and tried again; see pi_tracker/sensor_loop.py
-                sensor_loop = SensorLoop(LPS22HB(bus, LPS22HB_I2C_ADDRESS),
-                                         TCS34725(bus, TCS34725_I2C_ADDRESS),
-                                         SGM58031(bus, SGM_I2C_ADDRESS),
-                                         publish=functools.partial(post_message, mqtt_client),
-                                         publish_every_s=intervals.telemetry_s,
-                                         on_round=watchdog.round_done if watchdog else None)
-                systemd.notify('READY=1')  # everything is up; MQTT and the modem connect in the background
-                sensor_loop.run(stop_event, delay)
+            # Run the GLib main loop, with the sensor loop in a thread next to it. Ctrl+C
+            # and SIGTERM (systemctl stop) stop it cleanly. If the worker fails, the exit
+            # code is 1, so systemd can restart the tracker; see pi_tracker/workers.py
+            systemd.notify('READY=1')  # everything is up; MQTT and the modem connect in the background
+            exit_code = run_with_main_loop(lambda stop_event: sensor_worker(mqtt_client, watchdog, stop_event))
         finally:
-            # Also when something above failed: the timers stop and the status says offline
-            for thread in started_threads:
-                thread.stop()
+            # Also when the worker failed or got stuck: the timers stop and the status says offline
+            for timer in timers:
+                timer.stop()
 
             log.info("Stopping mqtt...")
             mqtt_stop(mqtt_client)
 
-def main():
-    # Log at INFO while reading the settings, then switch to the configured level.
-    # PI_TRACKER_LOG_LEVEL overrides the level in config.yml.
-    log_setup.setup(os.environ.get('PI_TRACKER_LOG_LEVEL', 'INFO'))
-    settings.current = settings.load(CONFIG_FILE)
-    log_setup.setup(os.environ.get('PI_TRACKER_LOG_LEVEL') or settings.current.log.level)
-    
-    # 0 for un-armed, 1 for armed, 3 panic. The state is saved on every change and
-    # read back here, so a restart doesn't disarm the tracker.
-    state_dir = os.path.expanduser(settings.current.state.directory)
-    alarm.current = alarm.AlarmState(os.path.join(state_dir, alarm.FILE_NAME))
-
-    # config.btn_state = {'data': {'SW1': 'NO_EVENT'}, 'error': 'NO_ERROR'}
-    
-    
-    # Run the GLib main loop, with idle_function in a thread next to it. Ctrl+C and
-    # SIGTERM (systemctl stop) stop it cleanly. If it fails, the exit code is 1, so
-    # systemd can restart the tracker; see pi_tracker/workers.py
-    delay = settings.current.intervals.sensor_loop_s
-    exit_code = run_with_main_loop(lambda stop_event: idle_function(delay, stop_event))
     log.info("Exiting the application...")
     sys.exit(exit_code)
 
