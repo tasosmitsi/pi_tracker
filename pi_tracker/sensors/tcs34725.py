@@ -121,13 +121,13 @@ class TCS34725(BaseSensorManager):
             self.INT = DigitalInputDevice(
                 INT_PORT, pull_up=True, active_state=None)
         if (self.debug):
-            print("Reseting TSL2581")
+            log.debug("Starting the TCS34725")
 
         if (self.TCS34725_init() == 1):
-            print("TCS34725 initialization error!!")
+            log.error("TCS34725 initialization error: unexpected chip ID")
         else:
             if (self.debug):
-                print("TCS34725 initialization success!!")
+                log.debug("TCS34725 initialization success")
 
     def shutdown(self):
         # self.Disable()
@@ -150,22 +150,22 @@ class TCS34725(BaseSensorManager):
         reg = reg | self.TCS34725_CMD_BIT  # Register addressing highest bit is set to 1
         self._bus.write_byte_data(self._address, reg, value)
         if (self.debug):
-            print("I2C: Write 0x%02X to register 0x%02X" % (value, reg))
+            log.debug("I2C: Write 0x%02X to register 0x%02X", value, reg)
 
     def Write_Word(self, reg, value):
         # "Writes an 8-bit value to the specified register/address"
         reg = reg | self.TCS34725_CMD_BIT
         self._bus.write_word_data(self._address, reg, value)
         if (self.debug):
-            print("I2C: Write 0x%02X to register 0x%02X" % (value, reg))
+            log.debug("I2C: Write 0x%02X to register 0x%02X", value, reg)
 
     def Read_Byte(self, reg):
         # "Read an unsigned byte from the I2C device"
         reg = reg | self.TCS34725_CMD_BIT
         result = self._bus.read_byte_data(self._address, reg)
         if (self.debug):
-            print("I2C: Device 0x%02X returned 0x%02X from reg 0x%02X" %
-                  (self._address, result & 0xFF, reg))
+            log.debug("I2C: Device 0x%02X returned 0x%02X from reg 0x%02X",
+                      self._address, result & 0xFF, reg)
         return result
 
     def Read_Word(self, reg):
@@ -173,8 +173,8 @@ class TCS34725(BaseSensorManager):
         reg = reg | self.TCS34725_CMD_BIT
         result = self._bus.read_word_data(self._address, reg)
         if (self.debug):
-            print("I2C: Device 0x%02X returned 0x%02X from reg 0x%02X" %
-                  (self._address, result & 0xFF, reg))
+            log.debug("I2C: Device 0x%02X returned 0x%02X from reg 0x%02X",
+                      self._address, result & 0xFF, reg)
         return result
 
     def Set_Gain(self, gain):

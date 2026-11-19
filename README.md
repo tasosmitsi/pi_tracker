@@ -10,6 +10,11 @@ On the Pi, from the repo root (`config.yml` and `certs/` are read from there):
 
 `PI_TRACKER_LOG_LEVEL=DEBUG python3 main.py` also logs the sensor readings.
 
+Everything is logged to `logs/pi_tracker.log` in the folder the app runs in, and
+run by hand it's printed as well. The file rotates at 1 MB and keeps 5 old ones
+(`log` in `config.yml`). If you sync with autosync, exclude `logs/` from its rsync
+(`--exclude 'logs/'`), or its `--delete` removes the Pi's logs.
+
 ## Run as a service
 `deploy/pi-tracker@.service` starts the tracker at boot, as your user, from
 `~/pi_tracker` with the venv in `~/pi_tracker/.venv`. It restarts the tracker
@@ -19,7 +24,8 @@ when it fails or hangs:
     sudo systemctl daemon-reload
     sudo systemctl enable --now pi-tracker@$USER
 
-- Log: `journalctl -u pi-tracker@$USER -f`. State: `systemctl status pi-tracker@$USER`.
+- Log: `tail -f ~/pi_tracker/logs/pi_tracker.log`. systemd's own lines (starts, restarts,
+  watchdog timeouts) are in `journalctl -u pi-tracker@$USER`. State: `systemctl status pi-tracker@$USER`.
 - After autosync has brought new code: `sudo systemctl restart pi-tracker@$USER`.
 - Stop the service before running `python3 main.py` by hand. Two copies share the
   MQTT client id and keep pushing each other off the broker, and both drive the sensors.
@@ -40,6 +46,7 @@ aren't installed.
     main.py              entry point: wiring and the GLib main loop
     config.yml           settings; anything left out falls back to pi_tracker/settings.py
     requirements.txt     pip packages for the venv
+    logs/                pi_tracker.log and its rotated copies (not in git)
     deploy/
       pi-tracker@.service  the systemd service
     pi_tracker/
@@ -52,7 +59,7 @@ aren't installed.
       failure_log.py     logs a job that keeps failing without flooding the log
       systemd.py         tells systemd the app is ready, and feeds its watchdog
       settings.py        settings from config.yml, with a default for each
-      log_setup.py       logging to stderr
+      log_setup.py       logging to logs/pi_tracker.log, and to the terminal when run by hand
       net/
         mqtt.py          MQTT client, publishing, commands
         modem.py         ModemManager: finds the modem and follows it, GPS on/off

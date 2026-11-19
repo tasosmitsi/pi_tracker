@@ -67,22 +67,20 @@ class LPS22HB(BaseSensorManager):
         self._bus.write_byte_data(self._address, cmd, val)
 
     def read_data(self):
+        """Pressure and temperature. An I2C error is raised, for the sensor loop to log and retry."""
         PRESS_DATA = 0.0
         TEMP_DATA = 0.0
         u8Buf = [0, 0, 0]
 
-        try:
-            time.sleep(0.1)
-            self.LPS22HB_START_ONESHOT()
-            if (self._read_byte(LPS_STATUS) & 0x01) == 0x01:  # a new pressure data is generated
-                u8Buf[0] = self._read_byte(LPS_PRESS_OUT_XL)
-                u8Buf[1] = self._read_byte(LPS_PRESS_OUT_L)
-                u8Buf[2] = self._read_byte(LPS_PRESS_OUT_H)
-                PRESS_DATA = ((u8Buf[2] << 16)+(u8Buf[1] << 8)+u8Buf[0])/4096.0
-            if (self._read_byte(LPS_STATUS) & 0x02) == 0x02:   # a new pressure data is generated
-                u8Buf[0] = self._read_byte(LPS_TEMP_OUT_L)
-                u8Buf[1] = self._read_byte(LPS_TEMP_OUT_H)
-                TEMP_DATA = ((u8Buf[1] << 8)+u8Buf[0])/100.0
-        except Exception as e:
-            print("LPS22HB read_data exception: ", e)
+        time.sleep(0.1)
+        self.LPS22HB_START_ONESHOT()
+        if (self._read_byte(LPS_STATUS) & 0x01) == 0x01:  # a new pressure data is generated
+            u8Buf[0] = self._read_byte(LPS_PRESS_OUT_XL)
+            u8Buf[1] = self._read_byte(LPS_PRESS_OUT_L)
+            u8Buf[2] = self._read_byte(LPS_PRESS_OUT_H)
+            PRESS_DATA = ((u8Buf[2] << 16)+(u8Buf[1] << 8)+u8Buf[0])/4096.0
+        if (self._read_byte(LPS_STATUS) & 0x02) == 0x02:   # a new pressure data is generated
+            u8Buf[0] = self._read_byte(LPS_TEMP_OUT_L)
+            u8Buf[1] = self._read_byte(LPS_TEMP_OUT_H)
+            TEMP_DATA = ((u8Buf[1] << 8)+u8Buf[0])/100.0
         return {'pressure_hPa': PRESS_DATA, 'temperature_C': TEMP_DATA}

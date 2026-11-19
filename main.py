@@ -43,11 +43,13 @@ def sensor_worker(mqtt_client, watchdog, stop_event):
         sensor_loop.run(stop_event, intervals.sensor_loop_s)
 
 def main():
-    # Log at INFO while reading the settings, then switch to the configured level.
+    # Log to logs/pi_tracker.log (and, run by hand, the terminal) at INFO while reading the
+    # settings, then switch to the configured level and file rotation; see pi_tracker/log_setup.py.
     # PI_TRACKER_LOG_LEVEL overrides the level in config.yml.
     log_setup.setup(os.environ.get('PI_TRACKER_LOG_LEVEL', 'INFO'))
     settings.current = settings.load(CONFIG_FILE)
-    log_setup.setup(os.environ.get('PI_TRACKER_LOG_LEVEL') or settings.current.log.level)
+    log_cfg = settings.current.log
+    log_setup.setup(os.environ.get('PI_TRACKER_LOG_LEVEL') or log_cfg.level, log_cfg.file_max_kb, log_cfg.file_backups)
 
     # 0 for un-armed, 1 for armed, 3 panic. The state is saved on every change and
     # read back here, so a restart doesn't disarm the tracker.

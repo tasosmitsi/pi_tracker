@@ -41,6 +41,8 @@ class IntervalSettings:
 @dataclasses.dataclass(frozen=True)
 class LogSettings:
     level: str = 'INFO'
+    file_max_kb: int = 1024             # logs/pi_tracker.log rotates at this size...
+    file_backups: int = 5               # ...keeping this many old files
 
 
 @dataclasses.dataclass(frozen=True)

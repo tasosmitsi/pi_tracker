@@ -23,6 +23,8 @@ intervals:
 
 log:
   level: INFO                  # DEBUG also shows the sensor readings; PI_TRACKER_LOG_LEVEL overrides this
+  file_max_kb: 1024            # logs/pi_tracker.log rotates at this size...
+  file_backups: 5              # ...keeping this many old files: pi_tracker.log.1 to .5
 
 state:
   directory: ~/.local/state/pi_tracker   # alarm state etc.; outside the repo so autosync can't delete it

@@ -1,5 +1,8 @@
 from pi_tracker.sensors.base import BaseSensorManager
+import logging
 import time
+
+log = logging.getLogger(__name__)
 
 # Pointer Register
 SGM_POINTER_CONVERT = 0x00
@@ -61,10 +64,10 @@ class SGM58031(BaseSensorManager):
         self.debug = self._options.get('debug', False)
         state = self._read_u16(SGM_POINTER_CONFIG) & 0x8000
         if (state != 0x8000):
-            print("SGM58031 initialization failed!!")
+            log.warning("SGM58031 initialization failed: unexpected config register")
         else:
             if self.debug:
-                print("SGM58031 initialization success!!")
+                log.debug("SGM58031 initialization success")
 
     def shutdown(self):
         pass

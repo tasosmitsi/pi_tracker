@@ -11,8 +11,8 @@ GREEN='\033[0;32m'
 NC='\033[0m'  # No Color
 
 sync_to_pi() {
-    rsync -avz --delete --exclude ".venv" --exclude="**/__pycache__" --exclude ".lgd-nfy0" "$@" "$SRC_DIR"
-"$PI_USER@$PI_HOST:$DEST_DIR"
+    #rsync -avz --delete --exclude ".venv" --exclude="**/__pycache__" --exclude ".lgd-nfy0" "$@" "$SRC_DIR" "$PI_USER@$PI_HOST:$DEST_DIR"
+    rsync -avz --delete --exclude ".venv" --exclude="**/__pycache__" --exclude ".lgd-nfy0" --exclude "logs/" "$@" "$SRC_DIR" "$PI_USER@$PI_HOST:$DEST_DIR"
 }
 
 # Initial sync
@@ -22,7 +22,7 @@ echo -e "${GREEN}Initial sync completed.${NC}"
 
 # Watch for changes. A save, a git checkout or a git apply gives a burst of
 # events: take the first, swallow the rest until it's quiet, then sync once.
-inotifywait -mr -e close_write,delete,move --exclude '(\.git|\.venv|__pycache__)' "$SRC_DIR" | while read -r EVENT
+inotifywait -mr -e close_write,delete,move --exclude '(\.git|\.venv|__pycache__|logs)' "$SRC_DIR" | while read -r EVENT
 do
     MORE=0
     while read -r -t "$QUIET_S" _; do
