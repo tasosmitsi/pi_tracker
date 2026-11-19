@@ -63,10 +63,26 @@ def main():
     modem = ModemWatcher()
     modem.start()
 
-    with PiJuice(1, PI_JUICE_I2C_ADDRESS) as pijuice:
-        mqtt_client = mqtt_ini()
-        timers = []  # GLib timers: their callbacks run on the main loop, one at a time
-        try:
+    mqtt_client = mqtt_ini()
+    timers = []  # GLib timers: their callbacks run on the main loop, one at a time
+    try:
+        # Under systemd with WatchdogSec (deploy/pi-tracker@.service): fed from a GLib
+        # timer while the sensor loop keeps finishing rounds, so a hang in either one
+        # gets the app restarted. Run by hand there's no watchdog.
+        watchdog = None
+        interval_s = systemd.watchdog_interval_s()
+        if interval_s:
+            watchdog = systemd.Watchdog(max_round_age_s=interval_s)
+            timers.append(StoppableRestartableGiThread(target=watchdog.feed).start(max(1, int(interval_s))))
+
+        # The workers: blocking loops, each in a thread of its own; the thread takes the
+        # function's name. Add more by passing them to run_with_main_loop() too.
+        def sensors(stop_event):
+            sensor_worker(mqtt_client, watchdog, stop_event)
+
+        # The PiJuice is open only around what uses it: its two timers, and the main
+        # loop that runs them. run_with_main_loop() blocks until the app stops.
+        with PiJuice(1, PI_JUICE_I2C_ADDRESS) as pijuice:
             # thread_post_modem = StoppableRestartableGiThread(target=post_modem, args=(mqtt_client, modem))
             # thread_post_battery = StoppableRestartableGiThread(target=post_battery, args=(mqtt_client, pijuice)).start(60)
 
@@ -74,32 +90,19 @@ def main():
             timers.append(StoppableRestartableGiThread(target=check_button, args=(pijuice, )).start(intervals.button_poll_s))
             timers.append(StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(intervals.telemetry_s))
 
-            # Under systemd with WatchdogSec (deploy/pi-tracker@.service): fed from a GLib
-            # timer while the sensor loop keeps finishing rounds, so a hang in either one
-            # gets the app restarted. Run by hand there's no watchdog.
-            watchdog = None
-            interval_s = systemd.watchdog_interval_s()
-            if interval_s:
-                watchdog = systemd.Watchdog(max_round_age_s=interval_s)
-                timers.append(StoppableRestartableGiThread(target=watchdog.feed).start(max(1, int(interval_s))))
-
-            # The workers: blocking loops, each in a thread of its own; the thread takes the
-            # function's name. Add more by passing them to run_with_main_loop() too.
-            def sensors(stop_event):
-                sensor_worker(mqtt_client, watchdog, stop_event)
-
             # Run the GLib main loop, with the workers next to it. Ctrl+C and SIGTERM
             # (systemctl stop) stop them cleanly. If one fails, the others stop too and
             # the exit code is 1, so systemd can restart the tracker; see pi_tracker/workers.py
             systemd.notify('READY=1')  # everything is up; MQTT and the modem connect in the background
             exit_code = run_with_main_loop(sensors)
-        finally:
-            # Also when the worker failed or got stuck: the timers stop and the status says offline
-            for timer in timers:
-                timer.stop()
+    finally:
+        # Also when something failed or got stuck: the timers stop and the status says offline.
+        # The loop has stopped by now, so no timer fires on the closed PiJuice in between.
+        for timer in timers:
+            timer.stop()
 
-            log.info("Stopping mqtt...")
-            mqtt_stop(mqtt_client)
+        log.info("Stopping mqtt...")
+        mqtt_stop(mqtt_client)
 
     log.info("Exiting the application...")
     sys.exit(exit_code)
