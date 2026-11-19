@@ -1,3 +1,7 @@
+import os
+import signal
+import threading
+import time
 import unittest
 
 try:
@@ -97,6 +101,71 @@ class GuardedTimerTest(unittest.TestCase):
         with self.assertLogs('pi_tracker.workers', 'WARNING') as logs:
             timer.stop()
         self.assertIn('already stopped', logs.output[0])
+
+
+
+def send(signum, after_s):
+    """Send this process `signum` after `after_s`, like Ctrl+C or systemctl stop would."""
+    threading.Timer(after_s, os.kill, (os.getpid(), signum)).start()
+
+
+@unittest.skipIf(GLib is None, 'PyGObject (gi) with GLib is not installed')
+class RunWithMainLoopTest(unittest.TestCase):
+    def setUp(self):
+        self.release = threading.Event()  # lets a stuck worker go at the end of the test
+        self.addCleanup(self.release.set)
+
+    def stuck(self, stop_event):
+        self.release.wait(10)  # ignores stop_event
+
+    def test_sigterm_stops_the_worker_cleanly(self):
+        send(signal.SIGTERM, 0.2)
+        with self.assertLogs('pi_tracker.workers', 'INFO') as logs:
+            exit_code = workers.run_with_main_loop(lambda stop_event: stop_event.wait(10))
+        self.assertEqual(exit_code, 0)
+        self.assertIn('SIGTERM received, stopping', logs.output[0])
+
+    def test_ctrl_c_stops_the_worker_cleanly(self):
+        send(signal.SIGINT, 0.2)
+        with self.assertLogs('pi_tracker.workers', 'INFO'):
+            self.assertEqual(workers.run_with_main_loop(lambda stop_event: stop_event.wait(10)), 0)
+
+    def test_a_failing_worker_ends_the_app_with_exit_code_1(self):
+        def broken(stop_event):
+            raise OSError(121, 'Remote I/O error')
+        with self.assertLogs('pi_tracker.workers', 'ERROR') as logs:
+            self.assertEqual(workers.run_with_main_loop(broken), 1)
+        self.assertIn('The worker failed', logs.output[0])
+        self.assertIn('Remote I/O error', logs.output[0])
+
+    def test_a_worker_that_ends_by_itself_is_a_failure(self):
+        with self.assertLogs('pi_tracker.workers', 'ERROR') as logs:
+            self.assertEqual(workers.run_with_main_loop(lambda stop_event: None), 1)
+        self.assertIn('ended without being asked to', logs.output[0])
+
+    def test_a_stuck_worker_is_left_behind_after_the_timeout(self):
+        send(signal.SIGTERM, 0.2)
+        started = time.monotonic()
+        with self.assertLogs('pi_tracker.workers', 'ERROR') as logs:
+            self.assertEqual(workers.run_with_main_loop(self.stuck, stop_timeout_s=0.5), 1)
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertIn('Still stopping after 0.5 s', logs.output[0])
+
+    def test_a_second_signal_exits_at_once(self):
+        send(signal.SIGINT, 0.2)
+        send(signal.SIGINT, 0.4)
+        started = time.monotonic()
+        with self.assertLogs('pi_tracker.workers', 'ERROR') as logs:
+            self.assertEqual(workers.run_with_main_loop(self.stuck, stop_timeout_s=30), 1)
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertIn('SIGINT again', logs.output[0])
+
+    def test_the_signal_handlers_are_put_back(self):
+        before = signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)
+        send(signal.SIGTERM, 0.2)
+        with self.assertLogs('pi_tracker.workers', 'INFO'):
+            workers.run_with_main_loop(lambda stop_event: stop_event.wait(10))
+        self.assertEqual((signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)), before)
 
 
 if __name__ == '__main__':
