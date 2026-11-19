@@ -89,6 +89,13 @@ class SensorLoopTest(unittest.TestCase):
         self.assertIn('Input/output error', logs.output[0])
         self.assertIn('LPS22HB works again after 1 failures', logs.output[-1])
 
+    def test_on_round_is_called_after_every_round(self):
+        rounds = []
+        sensor_loop = SensorLoop(self.pressure, self.light, self.adc, publish=lambda topic, payload: None,
+                                 publish_every_s=5, on_round=lambda: rounds.append(self.adc.reads))
+        sensor_loop.run(Rounds(3), 0.5)
+        self.assertEqual(rounds, [1, 2, 3])  # each time after the round's reads
+
     def test_each_sensor_is_started_once(self):
         self.sensor_loop().run(Rounds(3), 0.5)
         self.assertEqual((self.pressure.starts, self.light.starts, self.adc.starts), (1, 1, 1))

@@ -1,0 +1,6 @@
+# pip packages for the venv. Make the venv with --system-site-packages: PyGObject,
+# libmm-glib (gir1.2-modemmanager-1.0), the PiJuice software and lgpio come from apt.
+paho-mqtt>=2.0,<3     # tested with 2.1.0
+PyYAML>=6
+smbus2>=0.4
+gpiozero>=2.0

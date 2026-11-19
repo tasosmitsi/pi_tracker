@@ -6,7 +6,7 @@ import os
 import smbus2
 from pijuice import PiJuice
 
-from pi_tracker import alarm, log_setup, settings
+from pi_tracker import alarm, log_setup, settings, systemd
 from pi_tracker.button import check_button
 from pi_tracker.net.modem import ModemWatcher
 from pi_tracker.net.mqtt import mqtt_ini, mqtt_stop, post_message
@@ -52,6 +52,16 @@ def idle_function(delay, stop_event):
             thread_telemetry = StoppableRestartableGiThread(target=telemetry, args=(mqtt_client, modem, pijuice)).start(intervals.telemetry_s)
             started_threads.append(thread_telemetry)
 
+            # Under systemd with WatchdogSec (deploy/pi-tracker@.service): fed from a GLib
+            # timer while the sensor loop keeps finishing rounds, so a hang in either one
+            # gets the app restarted. Run by hand there's no watchdog.
+            watchdog = None
+            interval_s = systemd.watchdog_interval_s()
+            if interval_s:
+                watchdog = systemd.Watchdog(max_round_age_s=interval_s)
+                thread_watchdog = StoppableRestartableGiThread(target=watchdog.feed).start(max(1, int(interval_s)))
+                started_threads.append(thread_watchdog)
+
             with I2CBusManager(smbus2, 1) as bus:
                 # The loop starts the sensors itself. One that fails to start or to read
                 # is skipped for that round and tried again; see pi_tracker/sensor_loop.py
@@ -59,7 +69,9 @@ def idle_function(delay, stop_event):
                                          TCS34725(bus, TCS34725_I2C_ADDRESS),
                                          SGM58031(bus, SGM_I2C_ADDRESS),
                                          publish=functools.partial(post_message, mqtt_client),
-                                         publish_every_s=intervals.telemetry_s)
+                                         publish_every_s=intervals.telemetry_s,
+                                         on_round=watchdog.round_done if watchdog else None)
+                systemd.notify('READY=1')  # everything is up; MQTT and the modem connect in the background
                 sensor_loop.run(stop_event, delay)
         finally:
             # Also when something above failed: the timers stop and the status says offline

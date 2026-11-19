@@ -28,9 +28,12 @@ class _Step:
 
 
 class SensorLoop:
-    """Starts and reads each sensor once per round. `publish(topic, payload)` sends an MQTT message."""
+    """Starts and reads each sensor once per round. `publish(topic, payload)` sends an MQTT message.
 
-    def __init__(self, pressure, light, adc, publish, publish_every_s):
+    `on_round()`, if given, is called after every round (the systemd watchdog uses it).
+    """
+
+    def __init__(self, pressure, light, adc, publish, publish_every_s, on_round=None):
         self._steps = [
             _Step('LPS22HB', pressure, self._read_pressure),
             _Step('TCS34725', light, self._read_light),
@@ -38,6 +41,7 @@ class SensorLoop:
         ]
         self._publish = publish
         self._publish_every_s = publish_every_s
+        self._on_round = on_round
         self._last_thermistor_post = None
 
     def run(self, stop_event, delay_s):
@@ -45,6 +49,8 @@ class SensorLoop:
         try:
             while not stop_event.is_set():
                 self.read_all()
+                if self._on_round:
+                    self._on_round()
                 stop_event.wait(delay_s)
         finally:
             self._shutdown()

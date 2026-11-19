@@ -1,0 +1,34 @@
+# pi_tracker as a systemd service, run as your user from ~/pi_tracker.
+# The part after @ is the user. Install: see "Run as a service" in README.md.
+#   sudo systemctl enable --now pi-tracker@$USER
+
+[Unit]
+Description=pi_tracker anti-theft tracker (user %i)
+# Ordering only: the app copes without the network or ModemManager, but finds
+# the modem sooner when ModemManager is up first
+After=network.target ModemManager.service
+
+[Service]
+Type=notify
+User=%i
+WorkingDirectory=/home/%i/pi_tracker
+# The venv in the repo folder; autosync leaves .venv alone.
+# Without a venv: ExecStart=/usr/bin/python3 main.py
+ExecStart=/home/%i/pi_tracker/.venv/bin/python3 main.py
+
+# Restart after a failure (exit code 1, a crash, or the watchdog): after 10 s,
+# then waiting longer each time up to 5 min (RestartSteps needs systemd 254+)
+Restart=on-failure
+RestartSec=10
+RestartSteps=5
+RestartMaxDelaySec=5min
+
+# The app feeds the watchdog while both its GLib loop and its sensor loop run
+WatchdogSec=60
+NotifyAccess=main
+
+# On SIGTERM the app stops within 15 s by itself; after 30 s systemd kills it
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -10,6 +10,24 @@ On the Pi, from the repo root (`config.yml` and `certs/` are read from there):
 
 `PI_TRACKER_LOG_LEVEL=DEBUG python3 main.py` also logs the sensor readings.
 
+## Run as a service
+`deploy/pi-tracker@.service` starts the tracker at boot, as your user, from
+`~/pi_tracker` with the venv in `~/pi_tracker/.venv`. It restarts the tracker
+when it fails or hangs:
+
+    sudo cp deploy/pi-tracker@.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now pi-tracker@$USER
+
+- Log: `journalctl -u pi-tracker@$USER -f`. State: `systemctl status pi-tracker@$USER`.
+- After autosync has brought new code: `sudo systemctl restart pi-tracker@$USER`.
+- Stop the service before running `python3 main.py` by hand. Two copies share the
+  MQTT client id and keep pushing each other off the broker, and both drive the sensors.
+- No venv? Change `ExecStart` in the unit to `/usr/bin/python3 main.py`.
+- pip packages are in `requirements.txt`. PyGObject, libmm-glib
+  (`gir1.2-modemmanager-1.0`), the PiJuice software and lgpio come from apt, so
+  make the venv with `--system-site-packages`.
+
 ## Test
 From the repo root, on the laptop or the Pi:
 
@@ -21,6 +39,9 @@ aren't installed.
 ## Layout
     main.py              entry point: wiring and the GLib main loop
     config.yml           settings; anything left out falls back to pi_tracker/settings.py
+    requirements.txt     pip packages for the venv
+    deploy/
+      pi-tracker@.service  the systemd service
     pi_tracker/
       alarm.py           alarm state, saved to alarm.json on every change
       actions.py         arm_alarm / disarm_alarm
@@ -29,6 +50,7 @@ aren't installed.
       sensor_loop.py     starts and reads the sensors; one that fails is tried again next round
       workers.py         the GLib timer wrapper, and running the app until SIGINT/SIGTERM
       failure_log.py     logs a job that keeps failing without flooding the log
+      systemd.py         tells systemd the app is ready, and feeds its watchdog
       settings.py        settings from config.yml, with a default for each
       log_setup.py       logging to stderr
       net/
