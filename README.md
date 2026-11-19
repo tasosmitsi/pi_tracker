@@ -48,7 +48,7 @@ aren't installed.
       button.py          PiJuice SW1: a single press arms
       telemetry.py       the telemetry callback and the stats it publishes
       sensor_loop.py     starts and reads the sensors; one that fails is tried again next round
-      workers.py         the GLib timer wrapper, and running the app until SIGINT/SIGTERM
+      workers.py         the GLib timer wrapper, and running the worker threads until SIGINT/SIGTERM
       failure_log.py     logs a job that keeps failing without flooding the log
       systemd.py         tells systemd the app is ready, and feeds its watchdog
       settings.py        settings from config.yml, with a default for each

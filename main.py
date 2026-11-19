@@ -83,11 +83,16 @@ def main():
                 watchdog = systemd.Watchdog(max_round_age_s=interval_s)
                 timers.append(StoppableRestartableGiThread(target=watchdog.feed).start(max(1, int(interval_s))))
 
-            # Run the GLib main loop, with the sensor loop in a thread next to it. Ctrl+C
-            # and SIGTERM (systemctl stop) stop it cleanly. If the worker fails, the exit
-            # code is 1, so systemd can restart the tracker; see pi_tracker/workers.py
+            # The workers: blocking loops, each in a thread of its own; the thread takes the
+            # function's name. Add more by passing them to run_with_main_loop() too.
+            def sensors(stop_event):
+                sensor_worker(mqtt_client, watchdog, stop_event)
+
+            # Run the GLib main loop, with the workers next to it. Ctrl+C and SIGTERM
+            # (systemctl stop) stop them cleanly. If one fails, the others stop too and
+            # the exit code is 1, so systemd can restart the tracker; see pi_tracker/workers.py
             systemd.notify('READY=1')  # everything is up; MQTT and the modem connect in the background
-            exit_code = run_with_main_loop(lambda stop_event: sensor_worker(mqtt_client, watchdog, stop_event))
+            exit_code = run_with_main_loop(sensors)
         finally:
             # Also when the worker failed or got stuck: the timers stop and the status says offline
             for timer in timers:

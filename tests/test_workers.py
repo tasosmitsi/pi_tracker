@@ -135,7 +135,7 @@ class RunWithMainLoopTest(unittest.TestCase):
             raise OSError(121, 'Remote I/O error')
         with self.assertLogs('pi_tracker.workers', 'ERROR') as logs:
             self.assertEqual(workers.run_with_main_loop(broken), 1)
-        self.assertIn('The worker failed', logs.output[0])
+        self.assertIn('Worker broken failed', logs.output[0])
         self.assertIn('Remote I/O error', logs.output[0])
 
     def test_a_worker_that_ends_by_itself_is_a_failure(self):
@@ -159,6 +159,59 @@ class RunWithMainLoopTest(unittest.TestCase):
             self.assertEqual(workers.run_with_main_loop(self.stuck, stop_timeout_s=30), 1)
         self.assertLess(time.monotonic() - started, 3)
         self.assertIn('SIGINT again', logs.output[0])
+
+    def test_a_signal_stops_every_worker(self):
+        stopped = []
+        def sensors(stop_event):
+            stopped.append('sensors' if stop_event.wait(10) else 'timed out')
+        def gps(stop_event):
+            stopped.append('gps' if stop_event.wait(10) else 'timed out')
+        send(signal.SIGTERM, 0.2)
+        with self.assertLogs('pi_tracker.workers', 'INFO'):
+            self.assertEqual(workers.run_with_main_loop(sensors, gps), 0)
+        self.assertEqual(sorted(stopped), ['gps', 'sensors'])
+
+    def test_one_failing_worker_stops_the_others(self):
+        stopped = []
+        def gps(stop_event):
+            raise OSError(5, 'Input/output error')
+        def sensors(stop_event):
+            stopped.append(stop_event.wait(10))
+        with self.assertLogs('pi_tracker.workers', 'ERROR') as logs:
+            self.assertEqual(workers.run_with_main_loop(sensors, gps), 1)
+        self.assertEqual(stopped, [True])  # asked to stop, not timed out
+        self.assertIn('Worker gps failed', logs.output[0])
+
+    def test_a_worker_ending_by_itself_stops_the_others(self):
+        def gps(stop_event):
+            return
+        with self.assertLogs('pi_tracker.workers', 'ERROR') as logs:
+            self.assertEqual(workers.run_with_main_loop(lambda stop_event: stop_event.wait(10), gps), 1)
+        self.assertIn('Worker gps ended without being asked to', logs.output[0])
+
+    def test_a_stuck_worker_is_left_behind_when_another_fails(self):
+        def gps(stop_event):
+            raise OSError(5, 'Input/output error')
+        started = time.monotonic()
+        with self.assertLogs('pi_tracker.workers', 'ERROR') as logs:
+            self.assertEqual(workers.run_with_main_loop(self.stuck, gps, stop_timeout_s=0.5), 1)
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertIn('Still stopping after 0.5 s', logs.output[-1])
+
+    def test_threads_are_named_after_their_workers(self):
+        names = []
+        def sensors(stop_event):
+            names.append(threading.current_thread().name)
+        def record(stop_event):
+            names.append(threading.current_thread().name)
+            stop_event.wait(10)
+        with self.assertLogs('pi_tracker.workers', 'ERROR'):  # sensors ends by itself
+            workers.run_with_main_loop(sensors, lambda stop_event: record(stop_event))
+        self.assertEqual(sorted(names), ['sensors', 'worker-2'])
+
+    def test_it_needs_a_worker(self):
+        with self.assertRaises(ValueError):
+            workers.run_with_main_loop()
 
     def test_the_signal_handlers_are_put_back(self):
         before = signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)
